@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8">
+<title>รถบั้มงานวัด LIVE</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{margin:0;height:100%;background:#0b0618;overflow:hidden}
+body{display:flex;align-items:center;justify-content:center}
+canvas{width:min(100vw,56.25vh);height:min(177.78vw,100vh)}
+#demo{position:fixed;left:8px;top:8px;display:none;flex-direction:column;gap:4px;z-index:9}
+body.demo #demo{display:flex}
+#demo button{padding:6px 10px;font:14px Tahoma,sans-serif;cursor:pointer}
+</style></head><body>
+<canvas id="c" width="540" height="960"></canvas>
+<div id="demo">
+ <button onclick="demo('member')">🚗 เข้าร่วม</button>
+ <button onclick="demo('like')">❤️ ไลก์</button>
+ <button onclick="demo('chat')">💬 คอมเมนต์</button>
+ <button onclick="demo('gift')">🎁 ของขวัญ</button>
+ <button onclick="demo('follow')">➕ ตามแล้ว</button>
+ <button onclick="for(let i=0;i<10;i++)demo('member')">+10 คน</button>
+</div>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+const W=540,H=960,A={x:28,y:256,w:484,h:560},MAX=40;
+const FONT='Tahoma,"Noto Sans Thai",sans-serif';
+const COLORS=['#ff4d6d','#ffd23f','#3ddc97','#4cc9f0','#b388ff','#ff8c42','#f72585','#80ed99'];
+const cars=new Map();let parts=[],ticker=[],status={ok:false};
+const isDemo=location.search.includes('demo');if(isDemo)document.body.classList.add('demo');
+
+const hash=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h};
+function say(t){ticker.unshift({t,life:9});ticker=ticker.slice(0,5)}
+function burst(x,y,color,n=10,sp=160){for(let i=0;i<n;i++){const a=Math.random()*6.28,s=sp*(.3+Math.random());parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.6+Math.random()*.4,c:color})}}
+
+function getCar(id,name,avatar){
+  let c=cars.get(id);
+  if(!c){
+    if(cars.size>=MAX){let v=null;for(const x of cars.values())if(!v||x.last<v.last)v=x;cars.delete(v.id)}
+    const a=Math.random()*6.28;
+    c={id,name:(name||id).slice(0,12),color:COLORS[hash(id)%COLORS.length],
+       x:A.x+40+Math.random()*(A.w-80),y:A.y+40+Math.random()*(A.h-80),
+       vx:Math.cos(a)*60,vy:Math.sin(a)*60,r:22,score:0,star:0,last:0,hit:0,bc:0,
+       text:'',textT:0,img:null,ang:0,tx:0,ty:0,tt:0,dash:0};
+    if(avatar){const im=new Image();im.onload=()=>c.img=im;im.src=avatar}
+    cars.set(id,c);burst(c.x,c.y,c.color,14);say('🚗 '+c.name+' เข้าสู่สนาม');
+  }
+  c.last=performance.now();return c;
+}
+function boost(c,n=1){
+  if(c.bc>0)return;c.bc=.35;
+  let t=null,best=1e9;
+  for(const o of cars.values()){if(o===c)continue;const d=Math.hypot(o.x-c.x,o.y-c.y);if(d<best){best=d;t=o}}
+  let dx=Math.cos(c.ang),dy=Math.sin(c.ang);
+  if(t){dx=(t.x-c.x)/best;dy=(t.y-c.y)/best}
+  const p=380+Math.min(n,10)*30;c.vx+=dx*p;c.vy+=dy*p;c.dash=.4;
+}
+function handle(m){
+  if(m.type==='status'){status=m;return}
+  const c=getCar(m.id,m.name,m.avatar);
+  if(m.type==='chat'){c.text=(m.text||'').slice(0,22);c.textT=3.5;boost(c,1)}
+  else if(m.type==='like'){boost(c,m.n)}
+  else if(m.type==='gift'){c.star=12+((m.diamonds||0)>=100?10:0);c.score+=Math.max(5,m.diamonds||1);
+    burst(c.x,c.y,'#ffd23f',40,300);say('🎁 '+c.name+' ส่ง '+m.gift+(m.n>1?' x'+m.n:'')+' → รถราชา!')}
+  else if(m.type==='follow'){c.score+=3;burst(c.x,c.y,'#ff4d6d',20);say('➕ '+c.name+' กดติดตาม')}
+  else if(m.type==='share'){c.score+=3;boost(c,5);say('🔁 '+c.name+' แชร์ไลฟ์')}
+}
+
+// ---- เชื่อมกับตัวรับข้อมูลจาก TikTok ----
+function connectWS(){
+  const host=location.host||'localhost:3000';
+  const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+host);
+  const user=new URLSearchParams(location.search).get('user');
+  ws.onopen=()=>{if(user)ws.send(JSON.stringify({type:'setUser',user}))};
+  ws.onmessage=e=>{try{handle(JSON.parse(e.data))}catch(_){}};
+  ws.onclose=()=>{status={ok:false};setTimeout(connectWS,2000)};
+}
+connectWS();
+
+// ---- ปุ่มจำลอง (เปิดด้วย /?demo) ----
+const NAMES=['น้องเอ','พี่บอล','มะลิ','ต้นกล้า','แมวส้ม','ลุงหมึก','ฟ้าใส','ปังปอนด์','เจ๊นุ้ย','บีม','ก้อย','โอม'];
+function demo(type){
+  const nm=NAMES[Math.floor(Math.random()*NAMES.length)],id=type==='member'?nm+Math.floor(Math.random()*999):nm;
+  handle({type,id,name:nm,text:['สู้ๆ','ชนเลย!','555','บึ้มมม'][Math.floor(Math.random()*4)],n:5,gift:'Rose',diamonds:Math.random()<.5?1:150});
+}
+
+// ---- ฟิสิกส์ ----
+function update(dt){
+  const list=[...cars.values()];
+  for(const c of list){
+    c.bc-=dt;c.hit-=dt;c.textT-=dt;c.dash-=dt;if(c.star>0)c.star-=dt;
+    c.r=c.star>0?32:22;
+    c.tt-=dt;
+    if(c.tt<=0){c.tt=1+Math.random()*1.5;c.tx=A.x+40+Math.random()*(A.w-80);c.ty=A.y+40+Math.random()*(A.h-80)}
+    const d=Math.hypot(c.tx-c.x,c.ty-c.y)||1;
+    c.vx+=(c.tx-c.x)/d*160*dt;c.vy+=(c.ty-c.y)/d*160*dt;
+    const f=Math.exp(-.9*dt);c.vx*=f;c.vy*=f;
+    c.x+=c.vx*dt;c.y+=c.vy*dt;
+    if(Math.hypot(c.vx,c.vy)>20)c.ang=Math.atan2(c.vy,c.vx);
+    if(c.x<A.x+c.r){c.x=A.x+c.r;c.vx=Math.abs(c.vx)*.9}
+    if(c.x>A.x+A.w-c.r){c.x=A.x+A.w-c.r;c.vx=-Math.abs(c.vx)*.9}
+    if(c.y<A.y+c.r){c.y=A.y+c.r;c.vy=Math.abs(c.vy)*.9}
+    if(c.y>A.y+A.h-c.r){c.y=A.y+A.h-c.r;c.vy=-Math.abs(c.vy)*.9}
+  }
+  for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
+    const a=list[i],b=list[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,min=a.r+b.r;
+    if(d>=min)continue;
+    const nx=dx/d,ny=dy/d,ma=a.r*a.r,mb=b.r*b.r,ov=min-d;
+    a.x-=nx*ov*mb/(ma+mb);a.y-=ny*ov*mb/(ma+mb);b.x+=nx*ov*ma/(ma+mb);b.y+=ny*ov*ma/(ma+mb);
+    const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
+    if(rv<0){
+      const j2=-1.6*rv/(1/ma+1/mb);
+      a.vx-=j2/ma*nx;a.vy-=j2/ma*ny;b.vx+=j2/mb*nx;b.vy+=j2/mb*ny;
+      if(-rv>60){
+        const an=a.vx*nx+a.vy*ny,bn=-(b.vx*nx+b.vy*ny);
+        const w=(an>bn)?a:b;
+        if(w.hit<=0){w.hit=.3;w.score+=w.star>0?3:1}
+        burst((a.x+b.x)/2,(a.y+b.y)/2,'#fff4a3',6,200);
+      }
+    }
+  }
+  parts=parts.filter(p=>(p.l-=dt)>0);for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.96;p.vy*=.96}
+  for(const t of ticker)t.life-=dt;ticker=ticker.filter(t=>t.life>0);
+}
+
+// ---- วาด ----
+function txt(s,x,y,size,color,align='center',stroke=true){
+  g.font='bold '+size+'px '+FONT;g.textAlign=align;g.textBaseline='middle';
+  if(stroke){g.lineWidth=4;g.strokeStyle='rgba(20,5,40,.9)';g.strokeText(s,x,y)}
+  g.fillStyle=color;g.fillText(s,x,y);
+}
+function rr(x,y,w,h,r){g.beginPath();g.roundRect(x,y,w,h,r)}
+function bg(){
+  const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#2a0f4d');gr.addColorStop(1,'#12062a');
+  g.fillStyle=gr;g.fillRect(0,0,W,H);
+  // สายไฟประดับ
+  g.strokeStyle='#6b4a99';g.lineWidth=2;g.beginPath();g.moveTo(0,10);g.quadraticCurveTo(W/2,50,W,10);g.stroke();
+  const t=performance.now()/500;
+  for(let i=0;i<14;i++){const x=20+i*(W-40)/13,y=10+40*(1-Math.pow(2*x/W-1,2))*.5*1.0+ (x/W)*0;
+    const yy=10+ (40*Math.sin(Math.PI*x/W))*.5;
+    g.fillStyle=COLORS[i%COLORS.length];g.globalAlpha=.55+.45*Math.sin(t+i);g.beginPath();g.arc(x,yy+4,6,0,6.28);g.fill()}
+  g.globalAlpha=1;
+  txt('🎪 รถบั้มงานวัด',W/2,84,40,'#ffd23f');
+  // กติกา
+  rr(24,112,W-48,92,14);g.fillStyle='rgba(255,255,255,.08)';g.fill();g.strokeStyle='#ffd23f';g.lineWidth=2;g.stroke();
+  const R=[['❤️ กดไลก์','พุ่งชนคันอื่น'],['💬 คอมเมนต์','เข้าสนาม+พูดบนรถ'],['🎁 ของขวัญ','เป็นรถราชา 👑'],['➕ ติดตาม/🔁 แชร์','+3 คะแนน']];
+  R.forEach((r,i)=>{const x=40+(i%2)*236,y=134+Math.floor(i/2)*40;txt(r[0],x,y,17,'#fff','left',false);txt(r[1],x,y+18,14,'#cbb6f5','left',false)});
+  // อันดับ
+  const top=[...cars.values()].sort((a,b)=>b.score-a.score).slice(0,3).filter(c=>c.score>0);
+  txt('👑 ราชารถบั้ม',70,228,16,'#ffd23f','center');
+  if(!top.length)txt('ยังไม่มีใครชนเลย!',300,228,16,'#cbb6f5','center',false);
+  top.forEach((c,i)=>txt((i+1)+'.'+c.name.slice(0,7)+' '+c.score,190+i*118,228,15,i?'#fff':'#ffd23f','left'));
+  // สนาม
+  for(let y=0;y<A.h;y+=40)for(let x=0;x<A.w;x+=40){g.fillStyle=((x+y)/40)%2?'#3b2a63':'#33235a';g.fillRect(A.x+x,A.y+y,40,40)}
+  g.lineWidth=14;g.strokeStyle='#e63946';rr(A.x-7,A.y-7,A.w+14,A.h+14,16);g.stroke();
+  g.lineWidth=14;g.strokeStyle='#fff';g.setLineDash([26,26]);rr(A.x-7,A.y-7,A.w+14,A.h+14,16);g.stroke();g.setLineDash([]);
+}
+function drawCar(c){
+  const r=c.r;
+  g.save();g.translate(c.x,c.y);
+  g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.ellipse(3,r*.8,r,r*.5,0,0,6.28);g.fill();
+  if(c.star>0){g.shadowColor='#ffd23f';g.shadowBlur=22}
+  if(c.dash>0){g.strokeStyle='rgba(255,255,255,.6)';g.lineWidth=4;g.beginPath();g.moveTo(-Math.cos(c.ang)*r*1.2,-Math.sin(c.ang)*r*1.2);g.lineTo(-Math.cos(c.ang)*r*2.6,-Math.sin(c.ang)*r*2.6);g.stroke()}
+  g.fillStyle=c.color;g.beginPath();g.arc(0,0,r,0,6.28);g.fill();
+  g.shadowBlur=0;g.lineWidth=6;g.strokeStyle=c.star>0?'#ffd23f':'#222';g.stroke();
+  g.save();g.beginPath();g.arc(0,0,r*.62,0,6.28);g.clip();
+  if(c.img){try{g.drawImage(c.img,-r*.62,-r*.62,r*1.24,r*1.24)}catch(_){}}
+  else{g.fillStyle='#fff';g.fillRect(-r,-r,2*r,2*r);g.fillStyle=c.color;g.font='bold '+(r*.9)+'px '+FONT;g.textAlign='center';g.textBaseline='middle';g.fillText([...c.name][0]||'?',0,1)}
+  g.restore();
+  g.restore();
+  if(c.star>0)txt('👑',c.x,c.y-r-18,22,'#fff',true,false);
+  txt(c.name,c.x,c.y+r+13,13,'#fff');
+  if(c.textT>0&&c.text){
+    g.font='bold 14px '+FONT;const w=g.measureText(c.text).width+20,y=c.y-r-(c.star>0?44:28);
+    g.globalAlpha=Math.min(1,c.textT);g.fillStyle='#fff';rr(c.x-w/2,y-13,w,26,13);g.fill();
+    txt(c.text,c.x,y,14,'#2a0f4d','center',false);g.globalAlpha=1;
+  }
+}
+function draw(){
+  bg();
+  [...cars.values()].sort((a,b)=>a.y-b.y).forEach(drawCar);
+  for(const p of parts){g.globalAlpha=Math.max(0,p.l);g.fillStyle=p.c;g.fillRect(p.x-2,p.y-2,4,4)}g.globalAlpha=1;
+  // ข่าวสด
+  rr(24,838,W-48,106,14);g.fillStyle='rgba(0,0,0,.35)';g.fill();
+  if(!ticker.length)txt('มากดไลก์/คอมเมนต์ แล้วรถของคุณจะลงสนาม!',W/2,891,17,'#cbb6f5','center',false);
+  ticker.forEach((t,i)=>{g.globalAlpha=Math.min(1,t.life);txt(t.t,40,856+i*20,15,'#fff','left');g.globalAlpha=1});
+  if(isDemo||performance.now()<20000){g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();txt(status.ok?'เชื่อมแล้ว':'รอเชื่อมต่อ',W-32,20,12,'#fff','right')}
+}
+let last=performance.now();
+(function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)})(last);
+</script></body></html>

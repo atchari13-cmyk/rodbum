@@ -1,0 +1,12 @@
+{
+  "name": "rodbum-live",
+  "version": "1.1.0",
+  "description": "เกมรถบั้มงานวัด เชื่อม TikTok LIVE",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "tiktok-live-connector": "latest",
+    "ws": "^8.18.0"
+  }
+}
