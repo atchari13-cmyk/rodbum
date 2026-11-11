@@ -43,6 +43,7 @@ const rnd=(a,b)=>a+Math.random()*(b-a);
 let AC=null,master=null,audioOn=false;
 function startAudio(){
   document.getElementById('start').style.display='none';
+  try{const e=document.documentElement;(e.requestFullscreen||e.webkitRequestFullscreen).call(e)}catch(_){}
   try{AC=new(window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=P.vol;master.connect(AC.destination);
     if('speechSynthesis' in window)speechSynthesis.speak(new SpeechSynthesisUtterance(''));audioOn=true;sfx('chime')}catch(e){}
 }
@@ -94,7 +95,7 @@ function getP(id,name,avatar){
   if(!p){
     if(ppl.size>=MAX){let v=null;for(const x of ppl.values())if(!v||x.last<v.last)v=x;ppl.delete(v.id)}
     const h=hash(id);
-    p={id,name:(name||id).slice(0,12),color:CL[h%CL.length],skin:SK[h%SK.length],x:rnd(40,500),y:rnd(WY0,WY1),tx:0,ty:0,wt:0,
+    p={id,name:(isBad(name||id)?'ผู้ใจบุญ':(name||id)).slice(0,12),color:CL[h%CL.length],skin:SK[h%SK.length],x:rnd(40,500),y:rnd(WY0,WY1),tx:0,ty:0,wt:0,
        tasks:[],act:0,pend:0,merit:0,glow:0,bub:'',bubT:0,img:null,walk:0,mv:false,last:0,ns:Math.floor(Math.random()*5)};
     if(avatar){const im=new Image();im.onload=()=>p.img=im;im.src=avatar}
     ppl.set(id,p);
@@ -112,12 +113,27 @@ function celebrate(){
   for(let i=0;i<5;i++)setTimeout(()=>burst(rnd(80,460),rnd(280,420),CL[i%CL.length],36,260,60),i*350);
   speak('ขออนุโมทนาบุญกับทุกท่านค่ะ ลอยโคมทั้งลานแล้ว',{pri:1,rate:.95});
 }
+// ================= ตัวกรองคำไม่เหมาะสม =================
+// เพิ่มคำของคุณเองผ่านลิงก์ได้ เช่น ?ban=คำนี้,คำนั้น
+const norm=s=>String(s).toLowerCase().replace(/[\s.\-_*~'"`|,/\\+=()\[\]{}<>:;\u00b7\u2022\u200b-\u200d\ufeff]/g,'').replace(/(.)\1{2,}/gu,'$1');
+const noTone=s=>s.replace(/[\u0E48-\u0E4B]/g,'');
+const TH_BAD=['เหีย','สัส','ควย','เย็ด','เชีย','เงียน','ตอแหล','ระยำ','เสือก','กระหรี','ดอกทอง','สนตีน','แตด','ชักวาว','ไอสัตว์','อีสัตว์','ไปตาย','ชาติหมา','ขายตัว'];
+const EXTRA=(q.get('ban')||'').split(',').map(w=>noTone(norm(w))).filter(Boolean);
+const EN_BAD=/fuck|shit|bitch|asshole|nigg(a|er)|whore|slut|pussy|porn|faggot/;
+function isBad(s){
+  s=String(s||'');const n=norm(s),th=noTone(n);
+  if(/https?:|www\.|\.com|line\.me|@\w{3,}|\d{9,}/i.test(s))return true;
+  if(TH_BAD.some(w=>th.includes(w))||EXTRA.some(w=>th.includes(w)))return true;
+  if(/หี(?!บ)/.test(th)||/แม่ง|ห่า(?![งน])/.test(n))return true;
+  const en=n.replace(/0/g,'o').replace(/1/g,'i').replace(/3/g,'e').replace(/4/g,'a').replace(/5/g,'s').replace(/@/g,'a').replace(/\$/g,'s');
+  return EN_BAD.test(en)||/\b(dick|rape|raped|rapist|cunt)\b/.test(s.toLowerCase());
+}
 const PRAY=/^\s*(🙏|#พร|อธิษฐาน|สาธุ|ขอพร|ขอให้|ขอ(?!บ|โทษ|ถาม|เลข|หวย))/;
 function handle(m){
   if(m.type==='status'){status=m;return}
   const p=getP(m.id,m.name,m.avatar);
   if(m.type==='chat'){
-    const t=(m.text||'').trim();if(!t)return;
+    const t=(m.text||'').trim();if(!t)return;if(isBad(t))return;
     if(PRAY.test(t)){
       const w=t.replace(/^\s*#พร\s*/,'').slice(0,60);
       lants.push({x:p.x,y:p.y-60,t:w,name:p.name,age:0,sd:Math.random()*6});if(lants.length>14)lants.shift();
@@ -299,7 +315,7 @@ function draw(){
   }else txt('พิมพ์ "ขอให้…" ในคอมเมนต์ แล้วโคมของคุณจะลอยขึ้นฟ้า',W/2,868,14,'#cbb6f5','center',false);
   if(!ticker.length)txt('มาร่วมทำบุญกันนะคะ สาธุ 🙏',W/2,928,14,'#cbb6f5','center',false);
   ticker.forEach((tk,i)=>{g.globalAlpha=Math.min(1,tk.life);txt(tk.t,40,917+i*19,13,'#fff','left');g.globalAlpha=1});
-  if(isDemo||performance.now()<20000){g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();txt(status.ok?'เชื่อมแล้ว':'รอเชื่อมต่อ',W-32,20,12,'#fff','right')}
+  if(isDemo||q.has('debug')||performance.now()<20000){g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();txt(status.ok?'เชื่อมแล้ว @'+(status.user||''):'รอเชื่อมต่อ'+(q.get('user')?' @'+q.get('user'):''),W-32,20,12,'#fff','right')}
 }
 let last=performance.now();
 (function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)})(last);
