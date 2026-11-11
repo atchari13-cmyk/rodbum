@@ -35,7 +35,7 @@ const ST=[{n:'ใส่บาตร',ic:'🍚',x:66,c:'#e76f51',s:'pop'},{n:'ต
  {n:'ปิดทอง',ic:'✨',x:270,c:'#e9c46a',s:'gold'},{n:'ไหว้พระ',ic:'🪔',x:372,c:'#2a9d8f',s:'chime'},{n:'ผ้าป่า',ic:'🪙',x:474,c:'#9b5de5',s:'coin'}];
 const CL=['#e63946','#f4a261','#2a9d8f','#4cc9f0','#b388ff','#ffd23f','#f72585','#80ed99'];
 const SK=['#ffd9b3','#f1c27d','#e0ac69','#c68642'];
-const ppl=new Map();let floats=[],lants=[],parts=[],ticker=[],prayer=null,total=0,goal=100,status={ok:false};
+let wsOk=false;const ppl=new Map();let floats=[],lants=[],parts=[],ticker=[],prayer=null,total=0,goal=100,status={ok:false};
 const hash=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h};
 const rnd=(a,b)=>a+Math.random()*(b-a);
 
@@ -156,9 +156,9 @@ function connectWS(){
   const host=location.host||'localhost:3000';
   const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+host);
   const user=q.get('user');
-  ws.onopen=()=>{if(user)ws.send(JSON.stringify({type:'setUser',user}))};
+  ws.onopen=()=>{wsOk=true;if(user)ws.send(JSON.stringify({type:'setUser',user}))};
   ws.onmessage=e=>{try{handle(JSON.parse(e.data))}catch(_){}};
-  ws.onclose=()=>{status={ok:false};setTimeout(connectWS,2000)};
+  ws.onclose=()=>{wsOk=false;status={ok:false};setTimeout(connectWS,2000)};
 }
 connectWS();
 
@@ -315,7 +315,9 @@ function draw(){
   }else txt('พิมพ์ "ขอให้…" ในคอมเมนต์ แล้วโคมของคุณจะลอยขึ้นฟ้า',W/2,868,14,'#cbb6f5','center',false);
   if(!ticker.length)txt('มาร่วมทำบุญกันนะคะ สาธุ 🙏',W/2,928,14,'#cbb6f5','center',false);
   ticker.forEach((tk,i)=>{g.globalAlpha=Math.min(1,tk.life);txt(tk.t,40,917+i*19,13,'#fff','left');g.globalAlpha=1});
-  if(isDemo||q.has('debug')||performance.now()<20000){g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();txt(status.ok?'เชื่อมแล้ว @'+(status.user||''):'รอเชื่อมต่อ'+(q.get('user')?' @'+q.get('user'):''),W-32,20,12,'#fff','right')}
+  if(isDemo||q.has('debug')||performance.now()<20000){g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();const who=status.user||q.get('user')||'';
+    txt(!wsOk?'ต่อเซิร์ฟเวอร์ไม่ได้':status.ok?'เชื่อมแล้ว @'+who:'ต่อ TikTok ยังไม่ติด @'+who,W-32,20,12,'#fff','right');
+    if(wsOk&&!status.ok&&status.err){const e=String(status.err);txt(e.slice(0,42),W-32,36,11,'#ffb3b3','right');if(e.length>42)txt(e.slice(42,84),W-32,50,11,'#ffb3b3','right')}}
 }
 let last=performance.now();
 (function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)})(last);
