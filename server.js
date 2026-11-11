@@ -6,7 +6,21 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const lib = require('tiktok-live-connector');
-const Conn = lib.WebcastPushConnection || lib.TikTokLiveConnection;
+// ลองคลาสของไลบรารีเวอร์ชันใหม่ก่อน แล้วค่อยลองเวอร์ชันเก่า
+const CLASSES = [lib.TikTokLiveConnection, lib.WebcastPushConnection].filter(Boolean);
+let libVer = '';
+try { libVer = require('tiktok-live-connector/package.json').version; } catch (_) {}
+let usingClass = '';
+function makeConn(u) {
+  let last;
+  for (const C of CLASSES) {
+    try { const c = new C(u); usingClass = C.name; console.log('ใช้คลาส', C.name, 'ไลบรารีเวอร์ชัน', libVer || '?'); return c; }
+    catch (e) { last = e; console.error('สร้างด้วย ' + C.name + ' ไม่ได้:', e && e.message); }
+  }
+  throw last || new Error('ไม่พบคลาสเชื่อมต่อในไลบรารี');
+}
+process.on('uncaughtException', (e) => { lastErr = 'ข้อผิดพลาดไม่คาดคิด: ' + ((e && e.message) || e); console.error(lastErr); });
+process.on('unhandledRejection', (e) => { lastErr = 'ข้อผิดพลาดไม่คาดคิด: ' + ((e && e.message) || e); console.error(lastErr); });
 
 const PORT = process.env.PORT || 3000;
 let conn = null, connected = false, username = '', gen = 0, retry = null, sumTimer = null;
@@ -16,7 +30,7 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/health')) { res.writeHead(200); return res.end('ok'); }
   if (req.url.startsWith('/status')) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ user: username, connected, lastError: lastErr, gameClients: wss.clients.size, eventsReceived: cnt }, null, 2));
+    return res.end(JSON.stringify({ user: username, connected, lastError: lastErr, gameClients: wss.clients.size, eventsReceived: cnt, libVersion: libVer, usingClass, libExports: Object.keys(lib).slice(0, 25) }, null, 2));
   }
   fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
     if (err) { res.writeHead(500); return res.end('ไม่พบไฟล์ index.html'); }
@@ -60,7 +74,7 @@ function start(user) {
   if (conn) { try { conn.disconnect(); } catch (_) {} }
   username = user; connected = false; cnt = {}; status();
   console.log('▶️ เริ่มเชื่อมกับ @' + username);
-  try { conn = new Conn(username); }
+  try { conn = makeConn(username); }
   catch (e) { lastErr = 'สร้างการเชื่อมต่อไม่ได้: ' + ((e && e.message) || e); console.error(lastErr); status(); return; }
 
   // รองรับทั้งไลบรารีเวอร์ชันเก่า (ข้อมูลแบน) และเวอร์ชันใหม่ (ข้อมูลซ้อนใน d.user)
@@ -96,6 +110,7 @@ function start(user) {
     const dia = d.diamondCount || gd.diamondCount || 1;
     send({ type: 'gift', ...who(d), gift: d.giftName || gd.giftName || 'ของขวัญ', n, diamonds: dia * n });
   });
+  conn.on('error', (e) => { console.error('⚠️ error จาก TikTok:', (e && e.message) || e); });
   conn.on('disconnected', () => {
     if (my !== gen) return;
     connected = false; lastErr = 'หลุดการเชื่อมต่อจาก TikTok'; status();
