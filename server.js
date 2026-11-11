@@ -11,10 +11,17 @@ const CLASSES = [lib.TikTokLiveConnection, lib.WebcastPushConnection].filter(Boo
 let libVer = '';
 try { libVer = require('tiktok-live-connector/package.json').version; } catch (_) {}
 let usingClass = '';
+// เวอร์ชัน 2.x ต้องส่งตัวเลือก (options) เสมอ ถ้าไม่ส่งจะ error ตรง 'processInitialData'
+// ถ้ามี API key ของบริการลงนาม (Euler Stream) ใส่ไว้ใน Environment ชื่อ SIGN_API_KEY ได้
+function connOptions() {
+  const o = { processInitialData: false };
+  if (process.env.SIGN_API_KEY) o.signApiKey = process.env.SIGN_API_KEY;
+  return o;
+}
 function makeConn(u) {
   let last;
   for (const C of CLASSES) {
-    try { const c = new C(u); usingClass = C.name; console.log('ใช้คลาส', C.name, 'ไลบรารีเวอร์ชัน', libVer || '?'); return c; }
+    try { const c = new C(u, connOptions()); usingClass = C.name; console.log('ใช้คลาส', C.name, 'ไลบรารีเวอร์ชัน', libVer || '?'); return c; }
     catch (e) { last = e; console.error('สร้างด้วย ' + C.name + ' ไม่ได้:', e && e.message); }
   }
   throw last || new Error('ไม่พบคลาสเชื่อมต่อในไลบรารี');
@@ -30,7 +37,7 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/health')) { res.writeHead(200); return res.end('ok'); }
   if (req.url.startsWith('/status')) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ user: username, connected, lastError: lastErr, gameClients: wss.clients.size, eventsReceived: cnt, libVersion: libVer, usingClass, libExports: Object.keys(lib).slice(0, 25) }, null, 2));
+    return res.end(JSON.stringify({ user: username, connected, lastError: lastErr, gameClients: wss.clients.size, eventsReceived: cnt, libVersion: libVer, usingClass, hasLiveConnection: !!lib.TikTokLiveConnection, hasPushConnection: !!lib.WebcastPushConnection, hasSignKey: !!process.env.SIGN_API_KEY }, null, 2));
   }
   fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
     if (err) { res.writeHead(500); return res.end('ไม่พบไฟล์ index.html'); }
