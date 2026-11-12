@@ -49,7 +49,7 @@ function startAudio(){
   try{const e=document.documentElement;(e.requestFullscreen||e.webkitRequestFullscreen).call(e)}catch(_){}
   try{AC=new(window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=P.vol;master.connect(AC.destination);
     mg=AC.createGain();mg.gain.value=P.music*.5;mg.connect(master);
-    if('speechSynthesis' in window)speechSynthesis.speak(new SpeechSynthesisUtterance(''));audioOn=true;sfx('chime');startMusic()}catch(e){}
+    if('speechSynthesis' in window)speechSynthesis.speak(new SpeechSynthesisUtterance(''));audioOn=true;sfx('chime');startMusic();setTimeout(()=>speak(INVITE[0],{rate:.92,pitch:1.05,long:1}),2500)}catch(e){}
 }
 function tone(f,t0,d,type,v,dest){
   const o=AC.createOscillator(),gn=AC.createGain(),t=AC.currentTime+t0;
@@ -77,15 +77,15 @@ function startMusic(){
 }
 
 // ================= อ่านออกเสียงไทย =================
-let voices=[];const tts={q:[],busy:false,id:0};
+let lastSpoke=performance.now();let voices=[];const tts={q:[],busy:false,id:0};
 if('speechSynthesis' in window){const lv=()=>voices=speechSynthesis.getVoices();lv();speechSynthesis.onvoiceschanged=lv}
-function clean(s){
+function clean(s,m){
   return String(s).replace(/https?:\/\/\S+/g,'').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu,'')
-    .replace(/5{3,}/g,'ฮ่าๆๆ').replace(/(.)\1{3,}/gu,'$1$1').trim().slice(0,90);
+    .replace(/5{3,}/g,'ฮ่าๆๆ').replace(/(.)\1{3,}/gu,'$1$1').trim().slice(0,m||90);
 }
 function speak(text,o){
   o=o||{};if(!audioOn||P.tts==='off'||!('speechSynthesis' in window))return;
-  text=clean(text);if(!text)return;
+  text=clean(text,o.long?240:90);if(!text)return;
   if(o.pri){tts.q=tts.q.filter(x=>x.pri);tts.q.push({t:text,pri:1,rate:o.rate,pitch:o.pitch})}
   else{if(tts.q.length>=2)return;tts.q.push({t:text,rate:o.rate,pitch:o.pitch})}
   nextSpeak();
@@ -95,10 +95,41 @@ function nextSpeak(){
   const it=tts.q.shift(),u=new SpeechSynthesisUtterance(it.t),id=++tts.id;
   u.lang='th-TH';const v=voices.find(v=>/^th/i.test(v.lang));if(v)u.voice=v;
   u.rate=it.rate||1;u.pitch=it.pitch||1;u.volume=Math.min(1,P.vol+.2);
-  tts.busy=true;const done=()=>{if(tts.id===id){tts.busy=false;nextSpeak()}};
+  tts.busy=true;lastSpoke=performance.now();const done=()=>{if(tts.id===id){tts.busy=false;lastSpoke=performance.now();nextSpeak()}};
   u.onend=done;u.onerror=done;speechSynthesis.speak(u);
   setTimeout(()=>{if(tts.busy&&tts.id===id){speechSynthesis.cancel();done()}},15000);
 }
+
+
+// ================= คำเชิญพูดเป็นระยะๆ ตอนเงียบ =================
+// ปรับความถี่ด้วย ?talk=วินาที (ค่าเริ่มต้น 40, ขั้นต่ำ 15)  ปิดด้วย ?talk=0
+const TALK=q.get('talk')==='0'?0:Math.max(15,+(q.get('talk')||40));
+const INVITE=[
+ 'ขอเชิญทุกท่านร่วมลอยกระทง ขอบคุณสายน้ำที่หล่อเลี้ยงชีวิตเรา และอย่าลืมอธิษฐานก่อนปล่อยกระทงลอยไปนะคะ',
+ 'พิมพ์คำว่า ขอให้ แล้วตามด้วยพรที่คุณปรารถนา กระทงของคุณจะลอยไปพร้อมคำอธิษฐานค่ะ',
+ 'แสงเทียนนวลตา กลีบบัวพลิ้วไหว ขอให้ทุกความตั้งใจดี ลอยไปถึงฝั่งฝันนะคะ',
+ 'คืนนี้พระจันทร์เต็มดวง เชิญทุกท่านหลับตาลงสักครู่ ตั้งจิตอธิษฐาน แล้วปล่อยความทุกข์ให้ลอยไปกับสายน้ำค่ะ',
+ 'กดไลก์เพื่อช่วยให้กระทงของคุณลอยไปไกลๆ ถึงฝั่งฝัน นะคะ',
+ 'ขอให้ทุกท่านมีสุขภาพแข็งแรง ครอบครัวอบอุ่น และสมหวังในสิ่งที่ปรารถนาค่ะ',
+ 'ใครเพิ่งเข้ามา ยินดีต้อนรับสู่งานลอยกระทงออนไลน์นะคะ พิมพ์ ขอให้ ตามด้วยคำอธิษฐาน แล้วร่วมลอยกระทงด้วยกันเลยค่ะ',
+ 'ลอยกระทงคืนนี้ ขอลอยความโกรธ ความทุกข์ และความเศร้าหมอง ให้ไหลไปตามน้ำ เหลือไว้เพียงรอยยิ้มและความสุขค่ะ',
+ 'เมื่อกระทงลอยไป ขอให้คำอธิษฐานของคุณลอยไปถึงดวงจันทร์ที่ส่องแสงอยู่เหนือสายน้ำค่ะ',
+ 'ถ้าชอบบรรยากาศงานลอยกระทงคืนนี้ ฝากกดติดตาม และชวนเพื่อนๆ มาร่วมอธิษฐานด้วยกันนะคะ',
+ 'ขอบคุณทุกท่านที่มาร่วมลอยกระทงด้วยกันนะคะ ขอให้ทุกคนมีแต่ความสุข ความสงบ และโชคดีตลอดไปค่ะ'
+];
+let invOrder=[],invN=0;
+function nextInvite(){
+  const live=[...ppl.values()].filter(o=>o.k).length;
+  invN++;
+  if(invN%4===0&&live>0)return 'ตอนนี้มีกระทงลอยอยู่ในสายน้ำ '+live+' ใบ บุญรวม '+total+' ขออนุโมทนากับทุกท่านค่ะ';
+  if(!invOrder.length)invOrder=INVITE.map((_,i)=>i).sort(()=>Math.random()-.5);
+  return INVITE[invOrder.pop()];
+}
+setInterval(()=>{
+  if(!TALK||!audioOn||P.tts==='off'||tts.busy||tts.q.length)return;
+  if(performance.now()-lastSpoke<TALK*1000)return;
+  speak(nextInvite(),{rate:.92,pitch:1.05,long:1});
+},4000);
 
 // ================= ตัวกรองคำไม่เหมาะสม =================
 const norm=s=>String(s).toLowerCase().replace(/[\s.\-_*~'"`|,/\\+=()\[\]{}<>:;\u00b7\u2022\u200b-\u200d\ufeff]/g,'').replace(/(.)\1{2,}/gu,'$1');
