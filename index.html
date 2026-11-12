@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="th"><head><meta charset="utf-8">
-<title>งานวัดทำบุญ LIVE</title>
+<title>ลอยกระทง LIVE</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-html,body{margin:0;height:100%;background:#0b0618;overflow:hidden}
+html,body{margin:0;height:100%;background:#0a0620;overflow:hidden}
 body{display:flex;align-items:center;justify-content:center}
 canvas{width:min(100vw,56.25vh);height:min(177.78vw,100vh)}
 #demo{position:fixed;left:8px;top:8px;display:none;flex-direction:column;gap:4px;z-index:9}
@@ -15,55 +15,68 @@ body.demo #demo{display:flex}
 <canvas id="c" width="540" height="960"></canvas>
 <div id="start"><button onclick="startAudio()">🔊 แตะเพื่อเริ่มเกม (เปิดเสียง)</button></div>
 <div id="demo">
- <button onclick="demo('member')">🚶 เข้าร่วม</button>
+ <button onclick="demo('member')">🪷 เข้าร่วม</button>
  <button onclick="demo('like')">❤️ ไลก์</button>
  <button onclick="demo('chat')">💬 คอมเมนต์</button>
  <button onclick="demo('pray')">🙏 ขอพร</button>
- <button onclick="demo('gift')">🎁 ของขวัญ</button>
+ <button onclick="demo('gift')">🎁 ของขวัญเล็ก</button>
+ <button onclick="demo('gift',500)">🎁 ของขวัญใหญ่</button>
  <button onclick="demo('follow')">➕ ตามแล้ว</button>
+ <button onclick="demo('share')">🔁 แชร์</button>
  <button onclick="for(let i=0;i<10;i++)demo('member')">+10 คน</button>
 </div>
 <script>
 const cv=document.getElementById('c'),g=cv.getContext('2d');
-const W=540,H=960,GY=520,WY0=632,WY1=815,MAX=40;
-const FONT='Tahoma,"Noto Sans Thai",sans-serif';
+const W=540,H=960,GY=346,MAX=26;
 const q=new URLSearchParams(location.search);
-// ตั้งค่าผ่านลิงก์: ?tts=all|prayer|off  ?sfx=0  ?vol=0.5
-const P={tts:q.get('tts')||'all',sfx:q.get('sfx')!=='0',vol:Math.min(1,+(q.get('vol')||.8))};
+// เนื้อหาสำคัญทั้งหมดอยู่เหนือเส้น LIM เพื่อไม่ให้ช่องคอมเมนต์ของ TikTok ทับ (ปรับได้ ?lim=520)
+const LIM=Math.max(480,Math.min(700,+(q.get('lim')||575)));
+const FONT='Tahoma,"Noto Sans Thai",sans-serif';
+// ตั้งค่าผ่านลิงก์: ?tts=all|prayer|off  ?sfx=0  ?vol=0.5  ?music=0  ?ban=คำ,คำ  ?lim=575
+const P={tts:q.get('tts')||'all',sfx:q.get('sfx')!=='0',vol:Math.min(1,+(q.get('vol')||.8)),music:q.get('music')==='0'?0:Math.min(1,+(q.get('music')||.6))};
 const isDemo=q.has('demo');if(isDemo)document.body.classList.add('demo');
-const ST=[{n:'ใส่บาตร',ic:'🍚',x:66,c:'#e76f51',s:'pop'},{n:'ตีระฆัง',ic:'🔔',x:168,c:'#f4a261',s:'bell'},
- {n:'ปิดทอง',ic:'✨',x:270,c:'#e9c46a',s:'gold'},{n:'ไหว้พระ',ic:'🪔',x:372,c:'#2a9d8f',s:'chime'},{n:'ผ้าป่า',ic:'🪙',x:474,c:'#9b5de5',s:'coin'}];
-const CL=['#e63946','#f4a261','#2a9d8f','#4cc9f0','#b388ff','#ffd23f','#f72585','#80ed99'];
-const SK=['#ffd9b3','#f1c27d','#e0ac69','#c68642'];
-let wsOk=false;const ppl=new Map();let floats=[],lants=[],parts=[],ticker=[],prayer=null,total=0,goal=100,status={ok:false};
+const LT=GY+42,LB=LIM-30,LANE=[0,1,2,3].map(i=>LT+i*(LB-LT)/3);
+const CL=['#ff7aa2','#ffd23f','#7ae7c7','#8ecbff','#c3a6ff','#ff9f5a','#f472b6','#9be564'];
+let wsOk=false;const ppl=new Map();
+let floats=[],parts=[],lants=[],banner=null,prayer=null,total=0,goal=100,status={ok:false};
 const hash=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h};
 const rnd=(a,b)=>a+Math.random()*(b-a);
 
-// ================= เสียงเอฟเฟกต์ =================
-let AC=null,master=null,audioOn=false;
+// ================= เสียง =================
+let AC=null,master=null,mg=null,audioOn=false;
 function startAudio(){
   document.getElementById('start').style.display='none';
   try{const e=document.documentElement;(e.requestFullscreen||e.webkitRequestFullscreen).call(e)}catch(_){}
   try{AC=new(window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=P.vol;master.connect(AC.destination);
-    if('speechSynthesis' in window)speechSynthesis.speak(new SpeechSynthesisUtterance(''));audioOn=true;sfx('chime')}catch(e){}
+    mg=AC.createGain();mg.gain.value=P.music*.5;mg.connect(master);
+    if('speechSynthesis' in window)speechSynthesis.speak(new SpeechSynthesisUtterance(''));audioOn=true;sfx('chime');startMusic()}catch(e){}
 }
-function tone(f,t0,d,type,v){
+function tone(f,t0,d,type,v,dest){
   const o=AC.createOscillator(),gn=AC.createGain(),t=AC.currentTime+t0;
   o.type=type;o.frequency.value=f;gn.gain.setValueAtTime(0,t);gn.gain.linearRampToValueAtTime(v,t+.01);
-  gn.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(gn);gn.connect(master);o.start(t);o.stop(t+d+.05);
+  gn.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(gn);gn.connect(dest||master);o.start(t);o.stop(t+d+.05);
 }
 const SFX={
-  pop(){tone(520,0,.1,'triangle',.12);tone(700,.06,.12,'triangle',.1)},
-  coin(){tone(1320,0,.12,'square',.06);tone(1760,.08,.3,'square',.06)},
+  plop(){tone(300,0,.12,'sine',.12);tone(520,.04,.14,'sine',.08)},
+  coin(){tone(1320,0,.12,'square',.05);tone(1760,.08,.3,'square',.05)},
   bell(){[196,392,588,790].forEach((f,i)=>tone(f,0,2.4-i*.4,'sine',.22/(i+1)))},
   gold(){[523,659,784,1047].forEach((f,i)=>tone(f,i*.07,.45,'triangle',.1))},
   chime(){[784,988,1175,1568].forEach((f,i)=>tone(f,i*.13,1,'sine',.1))},
-  big(){SFX.bell();SFX.gold();setTimeout(SFX.coin,250)}
+  boom(){tone(90,0,.5,'sawtooth',.12);tone(60,.05,.6,'sine',.2)},
+  big(){SFX.bell();SFX.gold();setTimeout(SFX.boom,200);setTimeout(SFX.coin,350)}
 };
 const sfxT={};
 function sfx(n){if(!AC||!P.sfx)return;const t=performance.now();if(t-(sfxT[n]||0)<120)return;sfxT[n]=t;try{SFX[n]()}catch(e){}}
+// เพลงบรรยากาศสังเคราะห์ (ไม่มีลิขสิทธิ์) ปิดได้ด้วย ?music=0
+const PENT=[262,294,330,392,440,524,588,660,784,880];
+function startMusic(){
+  if(!AC||!P.music)return;let i=3;
+  setInterval(()=>{if(Math.random()<.3)return;i=Math.max(0,Math.min(PENT.length-1,i+Math.floor(rnd(-2,3))));
+    tone(PENT[i],0,1.5,'triangle',.12,mg);if(Math.random()<.25)tone(PENT[i]*2,.02,.9,'sine',.05,mg)},650);
+  const drone=()=>{tone(131,0,8,'sine',.1,mg);tone(196,0,8,'sine',.05,mg)};drone();setInterval(drone,7500);
+}
 
-// ================= อ่านออกเสียงภาษาไทย =================
+// ================= อ่านออกเสียงไทย =================
 let voices=[];const tts={q:[],busy:false,id:0};
 if('speechSynthesis' in window){const lv=()=>voices=speechSynthesis.getVoices();lv();speechSynthesis.onvoiceschanged=lv}
 function clean(s){
@@ -87,34 +100,7 @@ function nextSpeak(){
   setTimeout(()=>{if(tts.busy&&tts.id===id){speechSynthesis.cancel();done()}},15000);
 }
 
-// ================= ตัวละครและเหตุการณ์ =================
-function say(t){ticker.unshift({t,life:9});ticker=ticker.slice(0,2)}
-function burst(x,y,c,n,sp,gv){for(let i=0;i<n;i++){const a=Math.random()*6.28,s=sp*(.3+Math.random());parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.7+Math.random()*.6,c,g:gv||0})}}
-function getP(id,name,avatar){
-  let p=ppl.get(id);
-  if(!p){
-    if(ppl.size>=MAX){let v=null;for(const x of ppl.values())if(!v||x.last<v.last)v=x;ppl.delete(v.id)}
-    const h=hash(id);
-    p={id,name:(isBad(name||id)?'ผู้ใจบุญ':(name||id)).slice(0,12),color:CL[h%CL.length],skin:SK[h%SK.length],x:rnd(40,500),y:rnd(WY0,WY1),tx:0,ty:0,wt:0,
-       tasks:[],act:0,pend:0,merit:0,glow:0,bub:'',bubT:0,img:null,walk:0,mv:false,last:0,ns:Math.floor(Math.random()*5)};
-    if(avatar){const im=new Image();im.onload=()=>p.img=im;im.src=avatar}
-    ppl.set(id,p);
-  }
-  p.last=performance.now();return p;
-}
-const task=(s,big)=>({s,big:!!big,ox:rnd(-26,26),oy:rnd(0,22)});
-function addMerit(p,n){
-  p.merit+=n;p.pend+=n;total+=n;
-  if(total>=goal){goal+=100;celebrate()}
-}
-function celebrate(){
-  sfx('big');say('🏮 บุญครบ! ลอยโคมทั้งลาน');
-  for(let i=0;i<16;i++)lants.push({x:rnd(30,510),y:rnd(700,820),t:'',name:'',age:-i*.15,sd:Math.random()*6});
-  for(let i=0;i<5;i++)setTimeout(()=>burst(rnd(80,460),rnd(280,420),CL[i%CL.length],36,260,60),i*350);
-  speak('ขออนุโมทนาบุญกับทุกท่านค่ะ ลอยโคมทั้งลานแล้ว',{pri:1,rate:.95});
-}
 // ================= ตัวกรองคำไม่เหมาะสม =================
-// เพิ่มคำของคุณเองผ่านลิงก์ได้ เช่น ?ban=คำนี้,คำนั้น
 const norm=s=>String(s).toLowerCase().replace(/[\s.\-_*~'"`|,/\\+=()\[\]{}<>:;\u00b7\u2022\u200b-\u200d\ufeff]/g,'').replace(/(.)\1{2,}/gu,'$1');
 const noTone=s=>s.replace(/[\u0E48-\u0E4B]/g,'');
 const TH_BAD=['เหีย','สัส','ควย','เย็ด','เชีย','เงียน','ตอแหล','ระยำ','เสือก','กระหรี','ดอกทอง','สนตีน','แตด','ชักวาว','ไอสัตว์','อีสัตว์','ไปตาย','ชาติหมา','ขายตัว'];
@@ -128,27 +114,70 @@ function isBad(s){
   const en=n.replace(/0/g,'o').replace(/1/g,'i').replace(/3/g,'e').replace(/4/g,'a').replace(/5/g,'s').replace(/@/g,'a').replace(/\$/g,'s');
   return EN_BAD.test(en)||/\b(dick|rape|raped|rapist|cunt)\b/.test(s.toLowerCase());
 }
+
+// ================= ตรรกะเกม =================
+function burst(x,y,c,n,sp,gv){for(let i=0;i<n;i++){const a=Math.random()*6.28,s=sp*(.3+Math.random());parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.7+Math.random()*.6,c,g:gv||0})}}
+function firework(x,y,c,n){n=n||34;for(let i=0;i<n;i++){const a=i/n*6.283,s=rnd(110,150);parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1.3,c,g:50,add:1})}}
+function skyLantern(x,y){lants.push({x:x||rnd(40,500),y:y||rnd(LIM-40,LIM+60),sd:rnd(0,6),age:0,sp:rnd(22,34)})}
+function getP(id,name,avatar){
+  let p=ppl.get(id);
+  if(!p){
+    if(ppl.size>300){for(const x of ppl.values())if(!x.k){ppl.delete(x.id);break}}
+    const h=hash(id);
+    p={id,name:(isBad(name||id)?'ผู้ใจบุญ':(name||id)).slice(0,12),color:CL[h%CL.length],score:0,k:false,x:0,lane:0,sc:0,seed:rnd(0,6.28),
+       spd:12,boost:0,gold:0,glow:0,card:'',cardT:0,cardPray:false,img:null,last:0,done:0};
+    if(avatar){const im=new Image();im.onload=()=>p.img=im;im.src=avatar}
+    ppl.set(id,p);
+  }
+  p.last=performance.now();return p;
+}
+function launch(p){
+  if(p.k)return;
+  let cnt=[0,0,0,0];for(const o of ppl.values())if(o.k&&o.x<160)cnt[o.lane]++;
+  p.lane=cnt.indexOf(Math.min(...cnt));p.k=true;p.x=rnd(-10,90);p.sc=0;p.spd=rnd(11,16);p.boost=0;sfx('plop');
+  let live=[...ppl.values()].filter(o=>o.k);
+  if(live.length>MAX){live.sort((a,b)=>a.last-b.last);live[0].k=false}
+}
+function addScore(p,n){p.score+=n;total+=n;if(total>=goal){while(total>=goal)goal+=100;celebrate()}}
+function celebrate(){
+  sfx('big');banner={t1:'🪷 บุญครบ '+(goal-100)+'!',t2:'ปล่อยโคมลอยเต็มท้องฟ้า',life:5,tier:3};
+  for(let i=0;i<16;i++)setTimeout(()=>skyLantern(),i*160);
+  for(let i=0;i<6;i++)setTimeout(()=>{firework(rnd(80,460),rnd(190,320),CL[i%CL.length],38);sfx('boom')},i*380);
+  speak('ขออนุโมทนาบุญกับทุกท่านค่ะ ปล่อยโคมลอยเต็มท้องฟ้าแล้ว',{pri:1,rate:.95});
+}
 const PRAY=/^\s*(🙏|#พร|อธิษฐาน|สาธุ|ขอพร|ขอให้|ขอ(?!บ|โทษ|ถาม|เลข|หวย))/;
 function handle(m){
   if(m.type==='status'){status=m;return}
   const p=getP(m.id,m.name,m.avatar);
   if(m.type==='chat'){
-    const t=(m.text||'').trim();if(!t)return;if(isBad(t))return;
+    const t=(m.text||'').trim();if(!t||isBad(t))return;
+    launch(p);
     if(PRAY.test(t)){
       const w=t.replace(/^\s*#พร\s*/,'').slice(0,60);
-      lants.push({x:p.x,y:p.y-60,t:w,name:p.name,age:0,sd:Math.random()*6});if(lants.length>14)lants.shift();
-      prayer={name:p.name,text:w,life:14};p.glow=3;addMerit(p,2);sfx('chime');say('🏮 '+p.name+' ลอยโคมขอพร');
+      p.card=w;p.cardT=7;p.cardPray=true;p.glow=3;addScore(p,3);sfx('chime');
+      prayer={name:p.name,text:w,life:16};
+      for(let i=0;i<3;i++)setTimeout(()=>firework(rnd(120,420),rnd(190,300),'#ffd27a',18),i*250);
       speak(p.name+' ขอพรว่า '+w,{pri:1,rate:.9,pitch:1.05});
     }else{
-      p.bub=t.slice(0,24);p.bubT=3.5;addMerit(p,1);
+      p.card=t.slice(0,22);p.cardT=3.5;p.cardPray=false;addScore(p,1);
       if(P.tts==='all')speak('คุณ'+p.name+' บอกว่า '+t);
     }
   }
-  else if(m.type==='like'){addMerit(p,Math.min(m.n||1,20));if(p.tasks.length<2)p.tasks.push(task(p.ns++%5))}
-  else if(m.type==='gift'){addMerit(p,Math.max(10,m.diamonds||1));p.tasks.unshift(task(4,true));p.glow=15;
-    say('🎁 '+p.name+' ถวายผ้าป่า ('+m.gift+(m.n>1?' x'+m.n:'')+')');speak(p.name+' ถวายผ้าป่า ขออนุโมทนาบุญค่ะ',{pri:1})}
-  else if(m.type==='follow'){addMerit(p,3);p.tasks.push(task(3));say('➕ '+p.name+' ตามบุญ')}
-  else if(m.type==='share'){addMerit(p,3);p.tasks.push(task(2));say('🔁 '+p.name+' แบ่งบุญ')}
+  else if(m.type==='member'){launch(p)}
+  else if(m.type==='like'){const n=Math.min(m.n||1,20);launch(p);p.boost=Math.min(150,p.boost+22+n*3);addScore(p,n);
+    floats.push({x:p.x,y:LANE[p.lane]-34,t:'+'+n,s:17,c:'#ffe27a',l:1.2})}
+  else if(m.type==='gift'){
+    const d=Math.max(1,m.diamonds||1),tier=d>=300?3:d>=30?2:1;
+    launch(p);p.gold=tier===3?60:tier===2?40:25;p.sc=1;addScore(p,Math.max(10,d));
+    banner={t1:'🎁 '+p.name+' ส่ง '+m.gift+(m.n>1?' ×'+m.n:''),t2:tier===3?'กระทงมหาบุญลอยแล้ว!':'กระทงทองลอยแล้ว!',life:4.5,tier};
+    sfx(tier>1?'big':'gold');
+    const nf=tier===3?8:tier===2?5:2;
+    for(let i=0;i<nf;i++)setTimeout(()=>{firework(rnd(70,470),rnd(185,320),CL[i%CL.length],36);sfx('boom')},i*300);
+    for(let i=0;i<(tier===3?14:tier===2?6:0);i++)setTimeout(()=>skyLantern(),i*180);
+    speak(tier===3?'ขออนุโมทนาบุญกับคุณ'+p.name+' กระทงมหาบุญลอยแล้วค่ะ':'ขอบคุณคุณ'+p.name+' ที่ร่วมลอยกระทงทองค่ะ',{pri:1});
+  }
+  else if(m.type==='follow'){launch(p);addScore(p,3);p.glow=4;floats.push({x:p.x,y:LANE[p.lane]-34,t:'🕯️ ผู้ร่วมลอย',s:16,c:'#ffd9a0',l:1.8})}
+  else if(m.type==='share'){launch(p);addScore(p,3);skyLantern(p.x>0?p.x:rnd(60,480),LIM);floats.push({x:p.x,y:LANE[p.lane]-34,t:'🏮 แบ่งบุญ',s:16,c:'#ffd9a0',l:1.8})}
 }
 
 // ================= เชื่อมกับตัวรับข้อมูลจาก TikTok =================
@@ -165,39 +194,27 @@ connectWS();
 // ---- ปุ่มจำลอง (เปิดด้วย /?demo) ----
 const NAMES=['น้องเอ','พี่บอล','มะลิ','ต้นกล้า','แมวส้ม','ลุงหมึก','ฟ้าใส','ปังปอนด์','เจ๊นุ้ย','บีม','ก้อย','โอม'];
 const WISH=['ขอให้สุขภาพแข็งแรง','ขอให้ถูกหวยรางวัลที่หนึ่ง','ขอให้ครอบครัวมีความสุข','อธิษฐานให้สอบผ่านนะ','ขอให้งานราบรื่นทุกอย่าง'];
-function demo(type){
+function demo(type,dia){
   const nm=NAMES[Math.floor(Math.random()*NAMES.length)],id=type==='member'?nm+Math.floor(Math.random()*999):nm;
   const pick=a=>a[Math.floor(Math.random()*a.length)];
   if(type==='pray')return handle({type:'chat',id,name:nm,text:pick(WISH)});
-  handle({type,id,name:nm,text:pick(['สู้ๆ','งานวัดสนุกมาก','555','สวัสดีทุกคน']),n:5,gift:'Rose',diamonds:Math.random()<.5?1:150});
+  handle({type,id,name:nm,text:pick(['สู้ๆ','สวยมากเลย','555','สวัสดีทุกคน']),n:5,gift:dia?'Universe':'Rose',diamonds:dia||1});
 }
 
-// ================= ฟิสิกส์/ตรรกะ =================
-function move(p,tx,ty,sp,dt){const dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy);if(d>3){p.x+=dx/d*sp*dt;p.y+=dy/d*sp*dt;p.walk+=dt*9;p.mv=true;return false}return true}
-function doAct(p,t){
-  const st=ST[t.s],n=Math.max(1,p.pend);p.pend=0;
-  floats.push({x:p.x,y:p.y-62,t:'+'+n+' บุญ',s:15,c:'#ffe27a',l:1.8});
-  floats.push({x:st.x,y:588,t:st.ic,s:28,c:'#fff',l:1.5});
-  burst(st.x,575,st.c,12,150);sfx(t.big?'big':st.s);
-  if(t.big){burst(st.x,560,'#ffd23f',44,320,80);burst(st.x,560,'#fff',20,200,60)}
-}
+// ================= อัปเดต =================
 function update(dt){
   for(const p of ppl.values()){
-    p.bubT-=dt;p.glow-=dt;p.mv=false;
-    if(p.act>0){p.act-=dt}
-    else if(p.tasks.length){
-      const t=p.tasks[0],st=ST[t.s];
-      if(move(p,st.x+t.ox,WY0+t.oy,95,dt)){p.act=1.6;doAct(p,t);p.tasks.shift()}
-    }else{
-      p.wt-=dt;if(p.wt<=0){p.wt=rnd(2,6);p.tx=rnd(30,510);p.ty=rnd(WY0,WY1)}
-      move(p,p.tx,p.ty,34,dt);
-    }
+    p.glow-=dt;p.cardT-=dt;p.gold-=dt;
+    if(!p.k)continue;
+    p.sc=Math.min(1,p.sc+dt*1.5);p.boost*=Math.exp(-.5*dt);p.x+=(p.spd+p.boost)*dt;
+    if(p.boost>40&&Math.random()<.5)parts.push({x:p.x-20,y:LANE[p.lane]+8,vx:rnd(-15,0),vy:rnd(-20,-5),l:.6,c:'#ffe9a8',g:0,add:1});
+    if(p.x>W+50){p.k=false;p.done++}
   }
-  for(const l of lants){l.age+=dt;if(l.age>0){l.y-=(l.y>270?26:6)*dt;l.x+=Math.sin(l.age*1.2+l.sd)*12*dt}}
-  lants=lants.filter(l=>l.age<20);
-  for(const f of floats){f.l-=dt;f.y-=28*dt}floats=floats.filter(f=>f.l>0);
-  parts=parts.filter(p=>(p.l-=dt)>0);for(const p of parts){p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97}
-  for(const t of ticker)t.life-=dt;ticker=ticker.filter(t=>t.life>0);
+  for(const l of lants){l.age+=dt;l.y-=l.sp*dt;l.x+=Math.sin(l.age*1.1+l.sd)*14*dt}
+  lants=lants.filter(l=>l.y>150);
+  for(const f of floats){f.l-=dt;f.y-=24*dt}floats=floats.filter(f=>f.l>0);
+  parts=parts.filter(p=>(p.l-=dt)>0);for(const p of parts){p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.985}
+  if(banner&&(banner.life-=dt)<=0)banner=null;
   if(prayer&&(prayer.life-=dt)<=0)prayer=null;
 }
 
@@ -205,49 +222,40 @@ function update(dt){
 const bgc=document.createElement('canvas');bgc.width=W;bgc.height=H;
 (function(){
   const x=bgc.getContext('2d');
-  let gr=x.createLinearGradient(0,0,0,GY);gr.addColorStop(0,'#12062a');gr.addColorStop(1,'#6a2c70');
-  x.fillStyle=gr;x.fillRect(0,0,W,GY);
-  for(let i=0;i<70;i++){x.fillStyle='rgba(255,255,255,'+(.3+Math.random()*.6)+')';x.fillRect(rnd(0,W),rnd(230,470),1.6,1.6)}
-  x.fillStyle='#fff3c4';x.beginPath();x.arc(452,278,22,0,6.28);x.fill();
-  x.fillStyle='#2b1252';x.beginPath();x.arc(462,272,19,0,6.28);x.fill();
-  // เจดีย์ทอง
-  x.fillStyle='#d9a21b';x.fillRect(48,492,84,28);x.fillRect(58,470,64,22);
-  x.beginPath();x.moveTo(62,470);x.quadraticCurveTo(62,402,90,386);x.quadraticCurveTo(118,402,118,470);x.fill();
-  x.fillRect(86,338,8,50);x.beginPath();x.moveTo(90,306);x.lineTo(83,342);x.lineTo(97,342);x.fill();
-  x.fillStyle='#f6d365';x.fillRect(76,420,6,50);
-  // ศาลาวัด
-  x.fillStyle='#f3e2b3';x.fillRect(198,452,144,68);x.fillStyle='#5a1a1a';x.fillRect(255,474,30,46);
-  x.fillStyle='#d9a21b';x.fillRect(198,452,8,68);x.fillRect(334,452,8,68);
-  const roof=(a,b,c,d,e,f)=>{x.fillStyle='#b5172b';x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.lineTo(e,f);x.closePath();x.fill();x.strokeStyle='#f6d365';x.lineWidth=3;x.stroke()};
-  roof(168,456,270,394,372,456);roof(200,408,270,350,340,408);roof(236,362,270,320,304,362);
-  x.strokeStyle='#f6d365';x.lineWidth=3;x.beginPath();x.moveTo(270,320);x.lineTo(270,298);x.stroke();
-  // ต้นโพธิ์
-  x.fillStyle='#5b3a29';x.fillRect(466,470,14,50);x.fillStyle='#1f6f50';
-  [[473,448,30],[447,466,24],[500,462,24],[473,424,26]].forEach(a=>{x.beginPath();x.arc(a[0],a[1],a[2],0,6.28);x.fill()});
-  // พื้น
-  gr=x.createLinearGradient(0,GY,0,H);gr.addColorStop(0,'#6b4630');gr.addColorStop(1,'#3a2418');
+  let gr=x.createLinearGradient(0,0,0,GY);gr.addColorStop(0,'#090520');gr.addColorStop(.55,'#271350');gr.addColorStop(1,'#7a3a6a');
+  x.fillStyle=gr;x.fillRect(0,0,W,GY+2);
+  for(let i=0;i<130;i++){x.fillStyle='rgba(255,255,255,'+(.25+Math.random()*.6)+')';const r=Math.random()<.1?1.8:1.1;x.fillRect(rnd(0,W),rnd(0,GY-30),r,r)}
+  let mgr=x.createRadialGradient(440,312,8,440,312,130);mgr.addColorStop(0,'rgba(255,240,190,.5)');mgr.addColorStop(1,'rgba(255,240,190,0)');
+  x.fillStyle=mgr;x.fillRect(300,180,240,240);
+  x.fillStyle='#fff6d6';x.beginPath();x.arc(440,312,32,0,6.28);x.fill();
+  x.fillStyle='rgba(200,170,120,.18)';[[430,304,7],[450,320,5],[436,322,4]].forEach(a=>{x.beginPath();x.arc(a[0],a[1],a[2],0,6.28);x.fill()});
+  // เงาวัดริมแม่น้ำ
+  x.fillStyle='#120826';
+  const prang=(cx,h)=>{x.beginPath();x.moveTo(cx-26,GY);x.lineTo(cx-22,GY-h*.3);x.lineTo(cx-12,GY-h*.52);x.lineTo(cx-8,GY-h*.76);x.lineTo(cx,GY-h);x.lineTo(cx+8,GY-h*.76);x.lineTo(cx+12,GY-h*.52);x.lineTo(cx+22,GY-h*.3);x.lineTo(cx+26,GY);x.fill()};
+  prang(110,108);prang(60,72);prang(160,72);
+  x.beginPath();x.moveTo(200,GY);x.lineTo(250,GY-48);x.lineTo(300,GY);x.fill();
+  x.beginPath();x.moveTo(214,GY-30);x.lineTo(250,GY-62);x.lineTo(286,GY-30);x.fill();x.fillRect(212,GY-24,76,24);
+  [[340,24],[372,30],[508,28],[300,16]].forEach(a=>{x.beginPath();x.arc(a[0],GY-a[1]*.5,a[1],0,6.28);x.fill()});
+  x.fillRect(0,GY-6,W,8);
+  x.fillStyle='#ffd27a';[[104,GY-40],[116,GY-40],[240,GY-12],[262,GY-12],[56,GY-16],[168,GY-16]].forEach(a=>x.fillRect(a[0],a[1],3,5));
+  // แม่น้ำ
+  gr=x.createLinearGradient(0,GY,0,H);gr.addColorStop(0,'#33276b');gr.addColorStop(.3,'#1b1448');gr.addColorStop(1,'#080618');
   x.fillStyle=gr;x.fillRect(0,GY,W,H-GY);
-  x.strokeStyle='rgba(255,255,255,.12)';x.lineWidth=2;x.beginPath();x.moveTo(0,GY+1);x.lineTo(W,GY+1);x.stroke();
-  // สายไฟ
-  x.strokeStyle='#6b4a99';x.lineWidth=2;x.beginPath();x.moveTo(0,236);x.quadraticCurveTo(W/2,280,W,236);x.stroke();
-  // ซุ้มทำบุญ
-  ST.forEach(s=>{
-    const L=s.x-44;
-    x.fillStyle='#7a5238';x.fillRect(L,570,88,34);x.fillStyle='#3a2418';x.fillRect(L+4,576,80,28);
-    for(let i=0;i<8;i++){x.fillStyle=i%2?'#fff':s.c;x.fillRect(L+i*11,548,11,22)}
-    for(let i=0;i<8;i++){x.fillStyle=i%2?'#fff':s.c;x.beginPath();x.arc(L+i*11+5.5,570,5.5,0,3.14);x.fill()}
-    x.font='24px '+FONT;x.textAlign='center';x.textBaseline='middle';x.fillStyle='#fff';x.fillText(s.ic,s.x,592);
-    x.font='bold 15px '+FONT;x.lineWidth=4;x.strokeStyle='rgba(20,5,40,.9)';x.strokeText(s.n,s.x,538);x.fillStyle='#ffe9a8';x.fillText(s.n,s.x,538);
-  });
+  x.fillStyle='rgba(255,210,120,.5)';for(let i=0;i<40;i++){x.fillRect(rnd(0,W),GY+rnd(2,10),2,2)}
+  // ริมตลิ่งด้านหน้า (ส่วนตกแต่ง ไม่มีข้อมูลสำคัญ)
+  x.fillStyle='#07040f';x.beginPath();x.moveTo(0,H);x.lineTo(0,900);x.quadraticCurveTo(140,872,270,902);x.quadraticCurveTo(410,930,W,890);x.lineTo(W,H);x.fill();
+  for(let i=0;i<26;i++){const bx=rnd(0,W),by=rnd(890,945);x.strokeStyle='#0f2a1c';x.lineWidth=2;x.beginPath();x.moveTo(bx,by+30);x.quadraticCurveTo(bx+rnd(-8,8),by+10,bx+rnd(-12,12),by-rnd(10,34));x.stroke()}
+  [[70,846],[210,870],[400,860],[480,880]].forEach(a=>{x.fillStyle='#134d36';x.beginPath();x.ellipse(a[0],a[1],38,11,0,0,6.28);x.fill();x.fillStyle='#f48fb1';for(let k=0;k<5;k++){x.beginPath();x.ellipse(a[0]+(k-2)*5,a[1]-8,4,9,(k-2)*.25,0,6.28);x.fill()}});
 })();
 
 // ================= วาด =================
 function txt(s,x,y,size,color,align,stroke){
   g.font='bold '+size+'px '+FONT;g.textAlign=align||'center';g.textBaseline='middle';
-  if(stroke!==false){g.lineWidth=4;g.strokeStyle='rgba(20,5,40,.9)';g.strokeText(s,x,y)}
+  if(stroke!==false){g.lineWidth=4;g.strokeStyle='rgba(15,5,35,.9)';g.strokeText(s,x,y)}
   g.fillStyle=color;g.fillText(s,x,y);
 }
 function rr(x,y,w,h,r){g.beginPath();g.roundRect(x,y,w,h,r)}
+function ell(x,y,rx,ry,c){g.fillStyle=c;g.beginPath();g.ellipse(x,y,rx,ry,0,0,6.28);g.fill()}
 function wrap(s,maxW,size,maxL){
   g.font='bold '+size+'px '+FONT;const L=[];let cur='';
   for(const ch of s){if(g.measureText(cur+ch).width>maxW){L.push(cur);cur=ch;if(L.length>=maxL)break}else cur+=ch}
@@ -255,69 +263,80 @@ function wrap(s,maxW,size,maxL){
   if([...L.join('')].length<[...s].length)L[L.length-1]=L[L.length-1].slice(0,-1)+'…';
   return L;
 }
-function drawP(p){
-  const s=.75+.4*(p.y-WY0)/(WY1-WY0),x=p.x,y=p.y,bob=p.act>0?Math.abs(Math.sin(p.act*6))*2:(p.mv?Math.sin(p.walk)*2:0),top=y-30*s-bob;
-  g.fillStyle='rgba(0,0,0,.3)';g.beginPath();g.ellipse(x,y+2,12*s,4*s,0,0,6.28);g.fill();
-  g.fillStyle=p.color;rr(x-9*s,top,18*s,28*s,6*s);g.fill();
-  g.fillStyle='rgba(255,255,255,.75)';g.beginPath();g.moveTo(x-9*s,top);g.lineTo(x-2*s,top);g.lineTo(x+9*s,top+22*s);g.lineTo(x+3*s,top+22*s);g.fill();
-  g.fillStyle=p.skin;
-  if(p.act>0){g.beginPath();g.arc(x,top+5*s,4*s,0,6.28);g.fill()}
-  else{g.fillRect(x-12*s,top+6*s,4*s,12*s);g.fillRect(x+8*s,top+6*s,4*s,12*s)}
-  const hy=top-11*s;
-  if(p.glow>0){g.strokeStyle='rgba(255,226,122,'+Math.min(1,p.glow)+')';g.lineWidth=3;g.beginPath();g.arc(x,hy,15*s,0,6.28);g.stroke()}
-  g.fillStyle=p.skin;g.beginPath();g.arc(x,hy,11*s,0,6.28);g.fill();
-  if(p.img){g.save();g.beginPath();g.arc(x,hy,11*s,0,6.28);g.clip();try{g.drawImage(p.img,x-11*s,hy-11*s,22*s,22*s)}catch(e){}g.restore()}
-  else{g.fillStyle='#2b1b12';g.beginPath();g.arc(x,hy-2*s,11*s,3.3,6.1);g.fill()}
-  txt(p.name,x,y+13*s,Math.max(11,11*s),'#fff');
-  if(p.bubT>0&&p.bub){
-    g.font='bold 13px '+FONT;const w=g.measureText(p.bub).width+18,by=hy-24*s;
-    g.globalAlpha=Math.min(1,p.bubT);g.fillStyle='#fff';rr(x-w/2,by-12,w,24,12);g.fill();
-    txt(p.bub,x,by,13,'#2a0f4d','center',false);g.globalAlpha=1;
+function water(t){
+  g.save();g.beginPath();g.rect(0,GY,W,H-GY);g.clip();
+  for(let i=0;i<24;i++){const y=GY+8+i*15,w=34-i*.9+Math.sin(t*2+i)*9,a=Math.max(0,.4-i*.017);
+    g.fillStyle='rgba(255,236,180,'+a+')';g.fillRect(440-w/2+Math.sin(t*1.5+i)*7,y,w,3)}
+  g.fillStyle='rgba(255,255,255,.07)';
+  for(let i=0;i<30;i++){const y=GY+16+(i*41)%(H-GY-30),x=((i*97)+t*(6+(i%3)*5))%(W+90)-45;g.fillRect(x,y,36+(i%4)*14,2)}
+  g.restore();
+}
+function drawK(p,t){
+  const s=(.74+p.lane*.1)*(p.gold>0?1.35:1)*(.25+.75*p.sc),x=p.x,y=LANE[p.lane]+Math.sin(t*1.4+p.seed)*2.5;
+  const gold=p.gold>0,col=gold?'#ffd23f':p.color;
+  g.globalAlpha=.28;ell(x,y+24*s,28*s,8*s,'#ffb347');g.globalAlpha=1;
+  if(gold||p.glow>0){const hg=g.createRadialGradient(x,y-8*s,4,x,y-8*s,58*s);hg.addColorStop(0,gold?'rgba(255,215,80,.55)':'rgba(255,200,120,.4)');hg.addColorStop(1,'rgba(255,200,80,0)');g.fillStyle=hg;g.fillRect(x-60*s,y-70*s,120*s,120*s)}
+  ell(x,y+9*s,29*s,10*s,'#2f7d3c');ell(x,y+6*s,26*s,8.5*s,'#4aa857');
+  const petal=(a)=>{const px=x+Math.cos(a)*18*s,py=y+3*s+Math.sin(a)*5*s;g.fillStyle=col;g.beginPath();g.ellipse(px,py-7*s,5.4*s,10*s,Math.cos(a)*.5,0,6.28);g.fill();g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1;g.stroke()};
+  const n=8,off=p.seed*.2;
+  for(let i=0;i<n;i++){const a=i/n*6.283+off;if(Math.sin(a)<0)petal(a)}
+  g.fillStyle='#fff3c4';g.fillRect(x-2.2*s,y-16*s,4.4*s,15*s);
+  g.strokeStyle='#8b2f2f';g.lineWidth=1.6*s;g.beginPath();g.moveTo(x+9*s,y+2*s);g.lineTo(x+11*s,y-24*s);g.stroke();g.fillStyle='#ff5a3c';g.fillRect(x+10*s,y-26*s,2.2*s,3*s);
+  const fl=1+Math.sin(t*9+p.seed)*.15;g.shadowColor='#ffb347';g.shadowBlur=16;ell(x,y-21*s,3.2*s,6*s*fl,'#ffcf6b');g.shadowBlur=0;ell(x,y-20*s,1.6*s,3.4*s*fl,'#fff7d6');
+  for(let i=0;i<n;i++){const a=i/n*6.283+off;if(Math.sin(a)>=0)petal(a)}
+  if(p.img){g.save();g.beginPath();g.arc(x,y+8*s,7.5*s,0,6.28);g.clip();try{g.drawImage(p.img,x-7.5*s,y+.5*s,15*s,15*s)}catch(e){}g.restore();g.strokeStyle='#fff';g.lineWidth=1.4;g.beginPath();g.arc(x,y+8*s,7.5*s,0,6.28);g.stroke()}
+  txt(p.name,x,y+28*s,15,'#fff');
+  if(p.cardT>0&&p.card){
+    g.font='bold 15px '+FONT;const w=g.measureText(p.card).width+22,cy=y-44*s;
+    const cx=Math.max(w/2+6,Math.min(W-w/2-6,x));g.globalAlpha=Math.min(1,p.cardT);g.fillStyle=p.cardPray?'#ffe9a8':'#fff';rr(cx-w/2,cy-14,w,28,14);g.fill();
+    txt((p.cardPray?'🏮 ':'')+p.card,cx,cy,15,'#3a1450','center',false);g.globalAlpha=1;
   }
 }
-function drawLantern(l){
-  if(l.age<0)return;
-  const a=Math.min(1,(20-l.age)/3,l.age+.3);g.globalAlpha=Math.max(0,a);
-  g.shadowColor='#ffb347';g.shadowBlur=18;g.fillStyle='#ff7b2e';rr(l.x-11,l.y-16,22,30,9);g.fill();
-  g.shadowBlur=0;g.fillStyle='#ffd27a';rr(l.x-6,l.y-10,12,18,6);g.fill();
-  g.fillStyle='#b5172b';g.fillRect(l.x-8,l.y-18,16,4);g.fillRect(l.x-8,l.y+13,16,4);
-  if(l.t){g.font='bold 11px '+FONT;const t=l.t.length>16?l.t.slice(0,15)+'…':l.t,w=g.measureText(t).width+12;
-    g.fillStyle='rgba(0,0,0,.45)';rr(l.x-w/2,l.y+22,w,18,9);g.fill();txt(t,l.x,l.y+31,11,'#ffe9a8','center',false)}
-  g.globalAlpha=1;
-}
 function draw(){
-  g.drawImage(bgc,0,0);
-  const t=performance.now()/500;
-  for(let i=0;i<=16;i++){const u=i/16,y=236*(1-u)*(1-u)+2*280*(1-u)*u+236*u*u;g.fillStyle=CL[i%CL.length];g.globalAlpha=.6+.4*Math.sin(t+i);g.beginPath();g.arc(u*W,y+4,6,0,6.28);g.fill()}
-  g.globalAlpha=1;
-  // ส่วนหัว
-  txt('🪷 งานวัดทำบุญ',W/2,46,36,'#ffd23f');
-  const base=goal-100,pr=Math.max(0,Math.min(1,(total-base)/100));
-  rr(30,82,W-60,26,13);g.fillStyle='rgba(0,0,0,.4)';g.fill();
-  if(pr>0){rr(30,82,Math.max(26,(W-60)*pr),26,13);const gr=g.createLinearGradient(30,0,W-30,0);gr.addColorStop(0,'#ff9d2e');gr.addColorStop(1,'#ffd23f');g.fillStyle=gr;g.fill()}
-  txt('บุญรวม '+total+' / '+goal+'  → ลอยโคมทั้งลาน',W/2,95,14,'#fff');
-  rr(24,120,W-48,80,14);g.fillStyle='rgba(255,255,255,.08)';g.fill();g.strokeStyle='#ffd23f';g.lineWidth=2;g.stroke();
-  const R=[['❤️ กดไลก์','ทำบุญตามซุ้ม'],['🙏 พิมพ์ "ขอ…"','ลอยโคมขอพร'],['🎁 ของขวัญ','ถวายผ้าป่า'],['➕ ติดตาม / 🔁 แชร์','+3 บุญ']];
-  R.forEach((r,i)=>{const x=40+(i%2)*236,y=138+Math.floor(i/2)*38;txt(r[0],x,y,16,'#fff','left',false);txt(r[1],x,y+17,13,'#cbb6f5','left',false)});
-  const top=[...ppl.values()].sort((a,b)=>b.merit-a.merit).slice(0,3).filter(c=>c.merit>0);
-  txt('🏵 เจ้าภาพบุญ',70,218,15,'#ffd23f');
-  if(!top.length)txt('ยังไม่มีผู้ทำบุญ',300,218,15,'#cbb6f5','center',false);
-  top.forEach((c,i)=>txt((i+1)+'.'+c.name.slice(0,6)+' '+c.merit,160+i*125,218,14,i?'#fff':'#ffd23f','left'));
-  [...ppl.values()].sort((a,b)=>a.y-b.y).forEach(drawP);
-  lants.forEach(drawLantern);
-  for(const f of floats){g.globalAlpha=Math.min(1,f.l);txt(f.t,f.x,f.y,f.s,f.c);g.globalAlpha=1}
-  for(const p of parts){g.globalAlpha=Math.max(0,Math.min(1,p.l));g.fillStyle=p.c;g.fillRect(p.x-2,p.y-2,4,4)}g.globalAlpha=1;
-  // แผงล่าง
-  rr(24,842,W-48,106,14);g.fillStyle='rgba(0,0,0,.4)';g.fill();
+  const t=performance.now()/1000;
+  g.drawImage(bgc,0,0);water(t);
+  // ส่วนหัว (อยู่ในโซนปลอดภัยเหนือช่องคอมเมนต์)
+  txt('🪷 ลอยกระทง LIVE',W/2,52,36,'#ffd23f');
+  const base=goal-100,pr=Math.max(0,Math.min(1,(total-base)/100)),live=[...ppl.values()].filter(o=>o.k).length;
+  rr(30,84,W-60,26,13);g.fillStyle='rgba(0,0,0,.45)';g.fill();
+  if(pr>0){rr(30,84,Math.max(26,(W-60)*pr),26,13);const gr=g.createLinearGradient(30,0,W-30,0);gr.addColorStop(0,'#ff9d2e');gr.addColorStop(1,'#ffd23f');g.fillStyle=gr;g.fill()}
+  txt('กระทง '+live+' ใบ  ·  บุญรวม '+total+' / '+goal,W/2,97,16,'#fff');
+  txt('❤️ ไลก์ ลอยไกล',92,130,17,'#fff');txt('🙏 พิมพ์ "ขอ…"',270,130,17,'#fff');txt('🎁 ของขวัญ กระทงทอง',444,130,16,'#ffe9a8');
+  rr(24,150,W-48,88,16);g.fillStyle='rgba(10,4,30,.55)';g.fill();g.strokeStyle='rgba(255,210,122,.8)';g.lineWidth=2;g.stroke();
   if(prayer){
-    txt('🏮 คำอธิษฐานจาก '+prayer.name,40,860,14,'#ffd23f','left');
-    wrap(prayer.text,W-90,16,2).forEach((l,i)=>txt(l,40,882+i*20,16,'#fff','left'));
-  }else txt('พิมพ์ "ขอให้…" ในคอมเมนต์ แล้วโคมของคุณจะลอยขึ้นฟ้า',W/2,868,14,'#cbb6f5','center',false);
-  if(!ticker.length)txt('มาร่วมทำบุญกันนะคะ สาธุ 🙏',W/2,928,14,'#cbb6f5','center',false);
-  ticker.forEach((tk,i)=>{g.globalAlpha=Math.min(1,tk.life);txt(tk.t,40,917+i*19,13,'#fff','left');g.globalAlpha=1});
-  if(isDemo||q.has('debug')||performance.now()<20000){g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();const who=status.user||q.get('user')||'';
+    txt('🏮 คำอธิษฐานจาก '+prayer.name,W/2,172,17,'#ffd27a');
+    const L=wrap(prayer.text,W-80,21,2);L.forEach((l,i)=>txt(l,W/2,200+i*26-(L.length===1?8:0)+(L.length===1?12:0),21,'#fff'));
+  }else{
+    txt('พิมพ์ "ขอให้…" ในคอมเมนต์',W/2,184,21,'#fff');txt('แล้วกระทงพร้อมคำอธิษฐานของคุณจะลอยไป',W/2,214,17,'#cbb6f5',null,false);
+  }
+  const top=[...ppl.values()].sort((a,b)=>b.score-a.score).slice(0,3).filter(c=>c.score>0);
+  rr(24,248,330,28,14);g.fillStyle='rgba(10,4,30,.55)';g.fill();
+  if(!top.length)txt('🏵 เจ้าภาพกระทง  รอผู้ร่วมบุญ',40,262,16,'#ffd27a','left');
+  else{txt('🏵',40,262,16,'#ffd27a','left');top.forEach((c,i)=>txt((i+1)+'.'+c.name.slice(0,5)+' '+c.score,68+i*98,262,14,i?'#fff':'#ffd27a','left'))}
+  // กระทง เรียงตามช่องน้ำ
+  const arr=[...ppl.values()].filter(o=>o.k).sort((a,b)=>a.lane-b.lane||a.x-b.x);
+  arr.forEach(p=>drawK(p,t));
+  // โคมลอย
+  for(const l of lants){
+    const a=Math.min(1,(l.y-150)/70,l.age*1.5);g.globalAlpha=Math.max(0,a);
+    g.shadowColor='#ffb347';g.shadowBlur=14;g.fillStyle='#ff8a2e';rr(l.x-8,l.y-11,16,22,6);g.fill();g.shadowBlur=0;
+    g.fillStyle='#ffd88a';rr(l.x-4,l.y-6,8,12,4);g.fill();g.globalAlpha=1;
+  }
+  // ดอกไม้ไฟและประกาย
+  for(const p of parts){g.globalAlpha=Math.max(0,Math.min(1,p.l));g.globalCompositeOperation=p.add?'lighter':'source-over';g.fillStyle=p.c;g.fillRect(p.x-2,p.y-2,p.add?3:4,p.add?3:4)}
+  g.globalAlpha=1;g.globalCompositeOperation='source-over';
+  for(const f of floats){g.globalAlpha=Math.min(1,f.l);txt(f.t,f.x,f.y,f.s,f.c);g.globalAlpha=1}
+  if(banner){
+    const a=Math.min(1,banner.life,(4.5-banner.life)*4+.2);g.globalAlpha=Math.max(0,a);
+    rr(40,396,W-80,76,20);g.fillStyle='rgba(30,10,50,.82)';g.fill();g.strokeStyle='#ffd23f';g.lineWidth=3;g.stroke();
+    txt(banner.t1.slice(0,26),W/2,422,22,'#fff');txt(banner.t2,W/2,452,21,'#ffd23f');g.globalAlpha=1;
+  }
+  if(isDemo||q.has('debug')||performance.now()<20000){
+    g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();
+    const who=status.user||q.get('user')||'';
     txt(!wsOk?'ต่อเซิร์ฟเวอร์ไม่ได้':status.ok?'เชื่อมแล้ว @'+who:'ต่อ TikTok ยังไม่ติด @'+who,W-32,20,12,'#fff','right');
-    if(wsOk&&!status.ok&&status.err){const e=String(status.err);txt(e.slice(0,42),W-32,36,11,'#ffb3b3','right');if(e.length>42)txt(e.slice(42,84),W-32,50,11,'#ffb3b3','right')}}
+    if(wsOk&&!status.ok&&status.err){const e=String(status.err);txt(e.slice(0,42),W-32,36,11,'#ffb3b3','right');if(e.length>42)txt(e.slice(42,84),W-32,50,11,'#ffb3b3','right')}
+  }
 }
 let last=performance.now();
 (function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)})(last);
