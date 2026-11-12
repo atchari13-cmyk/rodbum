@@ -50,11 +50,12 @@ const send = (o) => {
   const s = JSON.stringify(o);
   wss.clients.forEach((c) => c.readyState === 1 && c.send(s));
 };
-const status = () => send({ type: 'status', ok: connected, user: username, err: lastErr });
+const status = () => send({ type: 'status', ok: connected, user: username, err: lastErr, cnt });
+setInterval(() => { if (wss.clients.size) status(); }, 5000);
 
 wss.on('connection', (ws) => {
   console.log('🔌 หน้าเกมเชื่อมเข้ามา (ตอนนี้ ' + wss.clients.size + ' หน้า)');
-  ws.send(JSON.stringify({ type: 'status', ok: connected, user: username, err: lastErr }));
+  ws.send(JSON.stringify({ type: 'status', ok: connected, user: username, err: lastErr, cnt }));
   ws.on('message', (raw) => {
     try {
       const m = JSON.parse(raw);
@@ -116,6 +117,12 @@ function start(user) {
     const n = d.repeatCount || 1;
     const dia = d.diamondCount || gd.diamondCount || 1;
     send({ type: 'gift', ...who(d), gift: d.giftName || gd.giftName || 'ของขวัญ', n, diamonds: dia * n });
+  });
+  // จำนวนผู้ชมปัจจุบัน -> เกมใช้ให้ตัวละครบนจอไม่เกินจำนวนคนที่ดูอยู่จริง
+  conn.on('roomUser', (d) => {
+    cnt.roomUser = (cnt.roomUser || 0) + 1;
+    const n = Number(d && (d.viewerCount || d.userCount || d.total)) || 0;
+    if (n) send({ type: 'viewers', n });
   });
   conn.on('error', (e) => { console.error('⚠️ error จาก TikTok:', (e && e.message) || e); });
   conn.on('disconnected', () => {
