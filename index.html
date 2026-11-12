@@ -27,7 +27,7 @@ body.demo #demo{display:flex}
  <button onclick="for(let i=0;i<12;i++)demo('member')">+12 คน</button>
 </div>
 <script>const cv=document.getElementById('c'),g=cv.getContext('2d');
-const W=540,H=960,MAXP=28;
+const W=540,H=960,MAXP=30;
 const q=new URLSearchParams(location.search);
 // ตั้งค่าผ่านลิงก์: ?tts=gift|all|off  ?sfx=0  ?vol=0.5  ?bpm=120 (จังหวะเต้น)  ?music=0.5 (เปิดเพลงในเกม)  ?talk=40  ?ban=คำ,คำ  ?debug
 // เนื้อหาสำคัญทั้งหมดอยู่เหนือเส้น y=575 (บน 60%) เพื่อไม่ให้ช่องคอมเมนต์ของ TikTok ทับ
@@ -35,10 +35,11 @@ const FONT='Tahoma,"Noto Sans Thai",sans-serif';
 const P={tts:q.get('tts')||'gift',sfx:q.get('sfx')!=='0',vol:Math.min(1,+(q.get('vol')||.8)),music:Math.min(1,+(q.get('music')||0))};
 const BPM=Math.max(60,Math.min(180,+(q.get('bpm')||120)));
 const isDemo=q.has('demo');if(isDemo)document.body.classList.add('demo');
-// ตำแหน่งบนเวที: แถวหลัง 6, แถวหน้า 5, และจุดกลางสำหรับเต้นเดี่ยว (ดัชนี 11)
-const SLOTS=[];for(let i=0;i<6;i++)SLOTS.push({x:70+i*80,y:424,s:.8});for(let i=0;i<5;i++)SLOTS.push({x:110+i*80,y:442,s:.88});SLOTS.push({x:270,y:436,s:1.18});
-// ตำแหน่งยืนหน้าเวที 2 แถว x 14
-const HOMES=[];for(let r=0;r<2;r++)for(let i=0;i<14;i++)HOMES.push({x:(r?46:27)+i*38,y:r?546:500,s:r?1.02:.92});
+// ตำแหน่งยืน/เต้น: แถวบนเวที 2 แถว + ลานหน้าเวที 2 แถว (ทุกคนยืนและเต้นอยู่ที่เดิม ไม่ย้ายที่)
+const HOMES=[];
+for(let i=0;i<6;i++)HOMES.push({x:70+i*80,y:424,s:.8});
+for(let i=0;i<5;i++)HOMES.push({x:110+i*80,y:442,s:.88});
+for(let r=0;r<2;r++)for(let i=0;i<14;i++)HOMES.push({x:(r?46:27)+i*38,y:r?546:500,s:r?1.02:.92});
 const COL=['#ff4d8d','#27d3ff','#ffd23f','#a66bff','#ff8a3c','#59e38a','#ff6b6b','#4d8bff'];
 const SKIN=['#ffe0bd','#f1c27d','#e0ac69','#c68642'];
 const AURA=[{ch:'♥',c:'#ff6fa5',n:'หัวใจ'},{ch:'★',c:'#ffe066',n:'ดาว'},{ch:'🔥',c:'#ff9a3c',n:'ไฟ'},{ch:'◯',c:'#7fe3ff',n:'ฟอง'},{ch:'⚡',c:'#fff27a',n:'สายฟ้า'}];
@@ -164,7 +165,7 @@ function nextTrack(){TI=(TI+1)%TRACKS.length;tAlign=true;trkStart=performance.no
 // ปรับความถี่ด้วย ?talk=วินาที (ค่าเริ่มต้น 40, ขั้นต่ำ 15)  ปิดด้วย ?talk=0
 const TALK=q.get('talk')==='0'?0:Math.max(15,+(q.get('talk')||40));
 const INVITE=[
- 'ยินดีต้อนรับสู่ปาร์ตี้แดนซ์ค่ะ เข้ามาแล้วตัวละครของคุณจะยืนรอหน้าเวที กดไลก์เมื่อไรก็ได้ขึ้นเวทีเต้นทันที',
+ 'ยินดีต้อนรับสู่ปาร์ตี้แดนซ์ค่ะ เข้ามาแล้วตัวละครของคุณจะยืนรอ กดไลก์เมื่อไรก็ได้เริ่มเต้นทันที',
  'ยิ่งกดไลก์ ยิ่งได้เต้นนานนะคะ ลองกดรัวๆ ให้ทั้งเวทีสนุกไปด้วยกันเลยค่ะ',
  'แชร์ไลฟ์นี้ให้เพื่อนๆ แล้วทุกคนจะได้เต้นพร้อมกันทั้งงานเลยนะคะ',
  'ถ้าชอบเพลงนี้ ฝากกดติดตาม แล้วจะมีสปอตไลต์ส่องตัวละครของคุณด้วยค่ะ',
@@ -176,8 +177,8 @@ const INVITE=[
 let invOrder=[],invN=0;
 function nextInvite(){
   invN++;
-  const st=[...ppl.values()].filter(p=>p.slot>=0).length,tot=ppl.size;
-  if(invN%4===0&&tot>0)return 'ตอนนี้มีคนขึ้นเวทีเต้น '+st+' คน และมีผู้ร่วมงานทั้งหมด '+tot+' คน ขอบคุณที่มาสนุกด้วยกันนะคะ';
+  const st=[...ppl.values()].filter(p=>p.dance>0).length,tot=ppl.size;
+  if(invN%4===0&&tot>0)return 'ตอนนี้มีผู้ร่วมงาน '+tot+' คน กำลังเต้น '+st+' คน ขอบคุณที่มาสนุกด้วยกันนะคะ';
   if(!invOrder.length)invOrder=INVITE.map((_,i)=>i).sort(()=>Math.random()-.5);
   return INVITE[invOrder.pop()];
 }
@@ -271,12 +272,12 @@ function giftFx(p,m){
   const d=Math.max(1,m.diamonds||1),tier=d>=300?3:d>=30?2:1,ai=hash(String(m.gift||'x').toLowerCase())%5;
   const T=tier===3?120:tier===2?90:60;
   p.fx={aura:ai,tier,t:T};p.spot=T;p.dance=Math.max(p.dance,tier===3?T:12);addScore(p,Math.max(10,d));
-  banner={t1:'🎁 '+p.name+' ส่ง '+m.gift+(m.n>1?' ×'+m.n:''),t2:tier===3?'👑 ขึ้นเวทีกลางเต้นเดี่ยว!':tier===2?'ได้ชุดแวววาว+ปีกเรืองแสง!':'ได้สปอตไลต์+ออร่า'+AURA[ai].n+'!',life:4.5};
+  banner={t1:'🎁 '+p.name+' ส่ง '+m.gift+(m.n>1?' ×'+m.n:''),t2:tier===3?'👑 ตัวใหญ่ เต้นหมุนเด่นกลางงาน!':tier===2?'ได้ชุดแวววาว+ปีกเรืองแสง!':'ได้สปอตไลต์+ออร่า'+AURA[ai].n+'!',life:4.5};
   sfx(tier>1?'big':'gold');flash=1;
   const nf=tier===3?8:tier===2?4:2;
   for(let i=0;i<nf;i++)setTimeout(()=>{firework(rnd(80,460),rnd(280,360),COL[(i+ai)%8],36);if(tier>1)sfx('boom')},i*280);
   burstConfetti(tier*30);
-  speak(tier===3?'ขอบคุณคุณ'+p.name+' ขึ้นเวทีกลางเลยค่ะ':'ขอบคุณคุณ'+p.name+' ค่ะ',{pri:1,pitch:1.1});
+  speak(tier===3?'ขอบคุณคุณ'+p.name+' เป็นดาวเด่นของงานเลยค่ะ':'ขอบคุณคุณ'+p.name+' ค่ะ',{pri:1,pitch:1.1});
 }
 function handle(m){
   if(m.type==='status'){status=m;return}
@@ -308,28 +309,20 @@ connectWS();
 const NAMES=['น้องเอ','พี่บอล','มะลิ','ต้นกล้า','แมวส้ม','ลุงหมึก','ฟ้าใส','ปังปอนด์','เจ๊นุ้ย','บีม','ก้อย','โอม'];
 const SAY=['สู้ๆ','เต้นเก่งมาก','555','สวัสดีทุกคน','เพลงมันส์!'];
 function demo(type,dia,n){
-  const nm=NAMES[Math.floor(Math.random()*NAMES.length)],id=type==='member'?nm+Math.floor(Math.random()*999):nm;
   const pick=a=>a[Math.floor(Math.random()*a.length)];
+  let id,nm;
+  if(type==='member'||!ppl.size){nm=pick(NAMES);id=nm+Math.floor(Math.random()*90+10);nm=id}
+  else{const o=pick([...ppl.values()]);id=o.id;nm=o.name}
   handle({type,id,name:nm,text:pick(SAY),n:n||5,gift:pick(['Rose','Doughnut','Galaxy','Heart Me','Lion']),diamonds:dia||1});
 }
 
 // ================= อัปเดต =================
+const isDancing=p=>p.dance>0||groupT>0||(p.fx&&p.fx.tier===3&&p.fx.t>0);
 function update(dt){
   if(P.music&&performance.now()-trkStart>TRK_DUR*1000)nextTrack();
   groupT=Math.max(0,groupT-dt);flash=Math.max(0,flash-dt);
-  const list=[...ppl.values()];
-  const dancing=p=>p.dance>0||groupT>0||(p.fx&&p.fx.tier===3&&p.fx.t>0);
-  const occ=new Array(12).fill(null);
-  for(const p of list){
+  for(const p of ppl.values()){
     p.dance-=dt;p.spot-=dt;p.glow-=dt;p.bubT-=dt;if(p.fx&&(p.fx.t-=dt)<=0)p.fx=null;
-    if(p.slot>=0){if(dancing(p))occ[p.slot]=p;else p.slot=-1}
-  }
-  for(const p of list)if(p.fx&&p.fx.tier===3&&dancing(p)&&p.slot!==11&&!occ[11]){if(p.slot>=0)occ[p.slot]=null;p.slot=11;occ[11]=p}
-  const want=list.filter(p=>dancing(p)&&p.slot<0).sort((a,b)=>b.score-a.score);
-  for(const p of want){const i=occ.findIndex((o,k)=>!o&&k<11);if(i<0)break;occ[i]=p;p.slot=i}
-  for(const p of list){
-    const T=p.slot>=0?SLOTS[p.slot]:HOMES[p.home],k=Math.min(1,dt*(p.slot>=0?5:4));
-    p.x+=(T.x-p.x)*k;p.y+=(T.y-p.y)*k;p.s+=(T.s-p.s)*k;
     if(p.fx&&Math.random()<dt*9&&parts.length<400){const A=AURA[p.fx.aura];parts.push({x:p.x+rnd(-16,16),y:p.y-rnd(8,70)*p.s,vx:rnd(-10,10),vy:-rnd(18,40),l:1.2,c:A.c,ch:A.ch,g:0})}
   }
   for(const f of floats){f.l-=dt;f.y-=24*dt}floats=floats.filter(f=>f.l>0);
@@ -407,9 +400,8 @@ function spotCone(p){
   g.save();g.globalCompositeOperation='lighter';g.globalAlpha=a;g.fillStyle=gr;g.beginPath();g.moveTo(p.x-8,264);g.lineTo(p.x+8,264);g.lineTo(p.x+30*p.s,p.y);g.lineTo(p.x-30*p.s,p.y);g.closePath();g.fill();g.restore();
 }
 function drawDancer(p,t,beat){
-  const S=p.s,dn=p.dance>0||groupT>0||(p.fx&&p.fx.tier===3),tier=p.fx?p.fx.tier:0;
-  const solo=p.slot===11&&tier===3;
-  const mi=solo?4:(p.slot>=0?Math.floor(beat/4)%4:(Math.floor(beat/4)+p.mv)%4),bb=beat+(p.slot>=0?0:p.off*.5);
+  const tier=p.fx?p.fx.tier:0,S=p.s*(tier===3?1.25:1),dn=isDancing(p);
+  const mi=tier===3?4:(Math.floor(beat/4)+(p.mv>>1))%4,bb=beat;
   const idl=Math.sin(t*1.6+p.off*6);
   const pose=dn?dancePose(bb,mi):{aR:72+idl*4,aL:72-idl*4,bob:idl*.8,lean:0,sx:0,jump:0};
   const sp=pose.spin!==undefined?pose.spin:1;
@@ -477,16 +469,16 @@ function draw(){
   if(pr>0){rr(24,58,Math.max(24,(W-48)*pr),24,12);const gr=g.createLinearGradient(24,0,W-24,0);gr.addColorStop(0,'#ff4d8d');gr.addColorStop(1,'#ffd23f');g.fillStyle=gr;g.fill()}
   txt('ความมันส์ ระดับ '+lv+'  ·  '+(total-base)+' / '+need,W/2,70,15,'#fff');
   rr(24,90,W-48,24,12);g.fillStyle='rgba(20,8,40,.7)';g.fill();g.strokeStyle='rgba(255,77,141,.7)';g.lineWidth=1.5;g.stroke();
-  txt('👋 เข้าร่วม = ยืนรอ   ❤️ ไลก์ = ขึ้นเวทีเต้น   🔁 แชร์ = เต้นทั้งงาน',W/2,102,14,'#fff');
+  txt('👋 เข้าร่วม = ยืนรอ   ❤️ ไลก์ = เต้น   🔁 แชร์ = เต้นทั้งงาน',W/2,102,14,'#fff');
   txt('🎁 ส่งของขวัญ ได้ชุดและออร่าสุดพิเศษ ไม่ซ้ำใคร',W/2,128,15,'#ffd9f0');
-  const GB=[['🌹 เล็ก','สปอตไลต์ส่องตัว','ออร่าตามของขวัญ'],['🍩 กลาง','ปีกเรืองแสง+ชุดแวว','+ ของเล็กทั้งหมด'],['🌌 ใหญ่','มงกุฎ+เวทีกลาง','เต้นเดี่ยวโชว์ทั้งงาน']];
+  const GB=[['🌹 เล็ก','สปอตไลต์ส่องตัว','ออร่าตามของขวัญ'],['🍩 กลาง','ปีกเรืองแสง+ชุดแวว','+ ของเล็กทั้งหมด'],['🌌 ใหญ่','มงกุฎ+ตัวใหญ่เด่น','เต้นหมุนโชว์ทั้งงาน']];
   GB.forEach((r,i)=>{const bx=16+i*172;rr(bx,140,164,58,12);g.fillStyle='rgba(20,8,40,.72)';g.fill();g.strokeStyle=['#ff9ec0','#9be8ff','#ffe066'][i];g.lineWidth=2;g.stroke();
     txt(r[0],bx+82,154,15,'#ffe9a8');txt(r[1],bx+82,172,13,'#fff',null,false);txt(r[2],bx+82,188,12,'#cbb6f5',null,false)});
   const top=[...ppl.values()].sort((a,b)=>b.score-a.score).slice(0,3).filter(c=>c.score>0);
   rr(16,226,W-32,24,12);g.fillStyle='rgba(20,8,40,.7)';g.fill();
   if(!top.length)txt('🏆 ดาวเต้น  รอผู้ร่วมงาน',28,238,13,'#ffd23f','left');
   else{txt('🏆',28,238,13,'#ffd23f','left');top.forEach((c,i)=>txt((i+1)+'.'+c.name.slice(0,6)+' '+c.score,52+i*112,238,13,i?'#fff':'#ffd23f','left'))}
-  const st=list.filter(p=>p.slot>=0).length;txt('เวที '+st+' | หน้าเวที '+(list.length-st),W-26,238,13,'#9be8ff','right');
+  const dc=list.filter(isDancing).length;txt('ผู้ร่วมงาน '+list.length+' | เต้น '+dc,W-26,238,13,'#9be8ff','right');
   if(banner){
     const a=Math.min(1,banner.life,(4.5-banner.life)*4+.2);g.globalAlpha=Math.max(0,a);
     rr(40,272,W-80,76,20);g.fillStyle='rgba(20,6,40,.88)';g.fill();g.strokeStyle='#ffd23f';g.lineWidth=3;g.stroke();
