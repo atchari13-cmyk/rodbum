@@ -19,26 +19,29 @@ body.demo #demo{display:flex}
  <button onclick="demo('like')">❤️ ไลก์</button>
  <button onclick="demo('chat')">💬 คอมเมนต์</button>
  <button onclick="demo('pray')">🙏 ขอพร</button>
+ <button onclick="demo('fortune')">🔮 เซียมซี</button>
  <button onclick="demo('gift')">🎁 ของขวัญเล็ก</button>
  <button onclick="demo('gift',500)">🎁 ของขวัญใหญ่</button>
  <button onclick="demo('follow')">➕ ตามแล้ว</button>
  <button onclick="demo('share')">🔁 แชร์</button>
  <button onclick="for(let i=0;i<10;i++)demo('member')">+10 คน</button>
 </div>
-<script>
-const cv=document.getElementById('c'),g=cv.getContext('2d');
-const W=540,H=960,GY=346,MAX=26;
+<script>const cv=document.getElementById('c'),g=cv.getContext('2d');
+const W=540,H=960,MAXP=30,MAXK=24;
 const q=new URLSearchParams(location.search);
-// เนื้อหาสำคัญทั้งหมดอยู่เหนือเส้น LIM เพื่อไม่ให้ช่องคอมเมนต์ของ TikTok ทับ (ปรับได้ ?lim=520)
-const LIM=Math.max(480,Math.min(700,+(q.get('lim')||575)));
+// ตั้งค่าผ่านลิงก์: ?tts=all|prayer|off  ?sfx=0  ?vol=0.5  ?music=0  ?talk=40  ?ban=คำ,คำ  ?debug
+// เนื้อหาสำคัญทั้งหมดอยู่เหนือเส้น y=575 (บน 60%) เพื่อไม่ให้ช่องคอมเมนต์ของ TikTok ทับ
 const FONT='Tahoma,"Noto Sans Thai",sans-serif';
-// ตั้งค่าผ่านลิงก์: ?tts=all|prayer|off  ?sfx=0  ?vol=0.5  ?music=0  ?ban=คำ,คำ  ?lim=575
 const P={tts:q.get('tts')||'all',sfx:q.get('sfx')!=='0',vol:Math.min(1,+(q.get('vol')||.8)),music:q.get('music')==='0'?0:Math.min(1,+(q.get('music')||.6))};
 const isDemo=q.has('demo');if(isDemo)document.body.classList.add('demo');
-const LT=GY+42,LB=LIM-30,LANE=[0,1,2,3].map(i=>LT+i*(LB-LT)/3);
-const CL=['#ff7aa2','#ffd23f','#7ae7c7','#8ecbff','#c3a6ff','#ff9f5a','#f472b6','#9be564'];
-let wsOk=false;const ppl=new Map();
-let floats=[],parts=[],lants=[],banner=null,prayer=null,total=0,goal=100,status={ok:false};
+const LANE=[498,532,566],CY0=402,CY1=452;
+const ST={pray:{x:300,y:420,n:'ไหว้พระ'},bell:{x:415,y:426,n:'ตีระฆัง'},lantern:{x:502,y:432,n:'ปล่อยโคม'},pier:{x:150,y:464,n:'ท่าน้ำ'},fortune:{x:200,y:436,n:'เซียมซี'}};
+const FLOW=['pray','bell','lantern','pier'];
+const SAI=['#ff6f91','#ffc15e','#5ad1b5','#7fb7ff','#c39bff','#ff9a62','#f06bb5','#9be564'];
+const SIN=['#7b2cbf','#c1121f','#1d7874','#e08e0b','#2b59c3','#b5179e','#0b6e4f','#d1495b'];
+const SK=['#ffe0bd','#f1c27d','#e0ac69','#c68642'];
+let wsOk=false;const ppl=new Map();let krs=[];
+let floats=[],parts=[],lants=[],banner=null,panel=null,total=0,goal=100,status={ok:false};
 const hash=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h};
 const rnd=(a,b)=>a+Math.random()*(b-a);
 
@@ -63,6 +66,8 @@ const SFX={
   gold(){[523,659,784,1047].forEach((f,i)=>tone(f,i*.07,.45,'triangle',.1))},
   chime(){[784,988,1175,1568].forEach((f,i)=>tone(f,i*.13,1,'sine',.1))},
   boom(){tone(90,0,.5,'sawtooth',.12);tone(60,.05,.6,'sine',.2)},
+  rattle(){for(let i=0;i<9;i++)tone(700+Math.random()*800,i*.07,.05,'square',.04)},
+  stick(){tone(1900,0,.25,'triangle',.08);tone(2500,.05,.2,'triangle',.05)},
   big(){SFX.bell();SFX.gold();setTimeout(SFX.boom,200);setTimeout(SFX.coin,350)}
 };
 const sfxT={};
@@ -109,17 +114,19 @@ const INVITE=[
  'พิมพ์คำว่า ขอให้ แล้วตามด้วยพรที่คุณปรารถนา กระทงของคุณจะลอยไปพร้อมคำอธิษฐานค่ะ',
  'แสงเทียนนวลตา กลีบบัวพลิ้วไหว ขอให้ทุกความตั้งใจดี ลอยไปถึงฝั่งฝันนะคะ',
  'คืนนี้พระจันทร์เต็มดวง เชิญทุกท่านหลับตาลงสักครู่ ตั้งจิตอธิษฐาน แล้วปล่อยความทุกข์ให้ลอยไปกับสายน้ำค่ะ',
- 'กดไลก์เพื่อช่วยให้กระทงของคุณลอยไปไกลๆ ถึงฝั่งฝัน นะคะ',
+ 'กดไลก์เพื่อร่วมทำบุญ ไหว้พระ ตีระฆัง ปล่อยโคม หรือลอยกระทงที่ท่าน้ำวัดได้เลยนะคะ',
  'ขอให้ทุกท่านมีสุขภาพแข็งแรง ครอบครัวอบอุ่น และสมหวังในสิ่งที่ปรารถนาค่ะ',
  'ใครเพิ่งเข้ามา ยินดีต้อนรับสู่งานลอยกระทงออนไลน์นะคะ พิมพ์ ขอให้ ตามด้วยคำอธิษฐาน แล้วร่วมลอยกระทงด้วยกันเลยค่ะ',
  'ลอยกระทงคืนนี้ ขอลอยความโกรธ ความทุกข์ และความเศร้าหมอง ให้ไหลไปตามน้ำ เหลือไว้เพียงรอยยิ้มและความสุขค่ะ',
  'เมื่อกระทงลอยไป ขอให้คำอธิษฐานของคุณลอยไปถึงดวงจันทร์ที่ส่องแสงอยู่เหนือสายน้ำค่ะ',
  'ถ้าชอบบรรยากาศงานลอยกระทงคืนนี้ ฝากกดติดตาม และชวนเพื่อนๆ มาร่วมอธิษฐานด้วยกันนะคะ',
+ 'ใครอยากเสี่ยงเซียมซีสนุกๆ พิมพ์คำว่า เซียมซี ได้เลยนะคะ เป็นความบันเทิงเบาๆ ให้ยิ้มกันค่ะ',
+ 'ท่าน้ำวัดคืนนี้งดงามด้วยแสงโคมและกระทงนับร้อย เชิญทุกท่านร่วมลอยกระทง และปล่อยโคมอธิษฐานด้วยกันค่ะ',
  'ขอบคุณทุกท่านที่มาร่วมลอยกระทงด้วยกันนะคะ ขอให้ทุกคนมีแต่ความสุข ความสงบ และโชคดีตลอดไปค่ะ'
 ];
 let invOrder=[],invN=0;
 function nextInvite(){
-  const live=[...ppl.values()].filter(o=>o.k).length;
+  const live=krs.length;
   invN++;
   if(invN%4===0&&live>0)return 'ตอนนี้มีกระทงลอยอยู่ในสายน้ำ '+live+' ใบ บุญรวม '+total+' ขออนุโมทนากับทุกท่านค่ะ';
   if(!invOrder.length)invOrder=INVITE.map((_,i)=>i).sort(()=>Math.random()-.5);
@@ -148,33 +155,69 @@ function isBad(s){
 
 // ================= ตรรกะเกม =================
 function burst(x,y,c,n,sp,gv){for(let i=0;i<n;i++){const a=Math.random()*6.28,s=sp*(.3+Math.random());parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.7+Math.random()*.6,c,g:gv||0})}}
-function firework(x,y,c,n){n=n||34;for(let i=0;i<n;i++){const a=i/n*6.283,s=rnd(110,150);parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1.3,c,g:50,add:1})}}
-function skyLantern(x,y){lants.push({x:x||rnd(40,500),y:y||rnd(LIM-40,LIM+60),sd:rnd(0,6),age:0,sp:rnd(22,34)})}
+function firework(x,y,c,n){n=n||34;for(let i=0;i<n;i++){const a=i/n*6.283,s=rnd(80,115);parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1.2,c,g:45,add:1})}}
+const FW=()=>[rnd(70,470),rnd(262,340)];
+function skyLantern(x,y){lants.push({x:x||rnd(30,510),y:y||rnd(400,470),sd:rnd(0,6),age:0,sp:rnd(20,30),big:Math.random()<.3})}
 function getP(id,name,avatar){
   let p=ppl.get(id);
   if(!p){
-    if(ppl.size>300){for(const x of ppl.values())if(!x.k){ppl.delete(x.id);break}}
+    if(ppl.size>=MAXP){let v=null;for(const x of ppl.values())if(!v||x.last<v.last)v=x;ppl.delete(v.id)}
     const h=hash(id);
-    p={id,name:(isBad(name||id)?'ผู้ใจบุญ':(name||id)).slice(0,12),color:CL[h%CL.length],score:0,k:false,x:0,lane:0,sc:0,seed:rnd(0,6.28),
-       spd:12,boost:0,gold:0,glow:0,card:'',cardT:0,cardPray:false,img:null,last:0,done:0};
+    p={id,name:(isBad(name||id)?'ผู้ใจบุญ':(name||id)).slice(0,12),male:(h>>3)%3===0,sai:SAI[h%8],sin:SIN[(h>>4)%8],skin:SK[(h>>7)%4],
+       x:rnd(30,200)<100?-10:550,y:rnd(CY0,CY1),tx:0,ty:0,wt:0,tasks:[],act:0,pend:0,score:0,glow:0,gold:0,bub:'',bubT:0,
+       img:null,walk:0,mv:false,last:0,ns:Math.floor(Math.random()*4),dir:1};
+    p.tx=rnd(40,500);p.ty=rnd(CY0,CY1);
     if(avatar){const im=new Image();im.onload=()=>p.img=im;im.src=avatar}
     ppl.set(id,p);
   }
   p.last=performance.now();return p;
 }
-function launch(p){
-  if(p.k)return;
-  let cnt=[0,0,0,0];for(const o of ppl.values())if(o.k&&o.x<160)cnt[o.lane]++;
-  p.lane=cnt.indexOf(Math.min(...cnt));p.k=true;p.x=rnd(-10,90);p.sc=0;p.spd=rnd(11,16);p.boost=0;sfx('plop');
-  let live=[...ppl.values()].filter(o=>o.k);
-  if(live.length>MAX){live.sort((a,b)=>a.last-b.last);live[0].k=false}
-}
+const task=(s,o)=>Object.assign({s,ox:rnd(-18,18),oy:rnd(-4,8)},o||{});
+function addTask(p,t,front){if(front)p.tasks.unshift(t);else if(p.tasks.length<3)p.tasks.push(t)}
 function addScore(p,n){p.score+=n;total+=n;if(total>=goal){while(total>=goal)goal+=100;celebrate()}}
 function celebrate(){
   sfx('big');banner={t1:'🪷 บุญครบ '+(goal-100)+'!',t2:'ปล่อยโคมลอยเต็มท้องฟ้า',life:5,tier:3};
   for(let i=0;i<16;i++)setTimeout(()=>skyLantern(),i*160);
-  for(let i=0;i<6;i++)setTimeout(()=>{firework(rnd(80,460),rnd(190,320),CL[i%CL.length],38);sfx('boom')},i*380);
+  for(let i=0;i<6;i++)setTimeout(()=>{const f=FW();firework(f[0],f[1],SAI[i%8],38);sfx('boom')},i*380);
   speak('ขออนุโมทนาบุญกับทุกท่านค่ะ ปล่อยโคมลอยเต็มท้องฟ้าแล้ว',{pri:1,rate:.95});
+}
+function laneFree(){const c=[0,0,0];for(const k of krs)if(k.x<ST.pier.x+130)c[k.lane]++;return c.indexOf(Math.min(...c))}
+function makeK(p,t){
+  krs.push({owner:p.id,name:p.name,color:p.sai,x:ST.pier.x+52,lane:laneFree(),sc:0,spd:rnd(11,16),boost:0,gold:t.gold?40:0,seed:rnd(0,6.28),card:t.wish||'',cardT:t.wish?7:0,pray:!!t.wish});
+  if(krs.length>MAXK)krs.shift();
+}
+function boostK(p,n){for(const k of krs)if(k.owner===p.id)k.boost=Math.min(150,k.boost+22+n*3)}
+
+// ================= เสี่ยงเซียมซี (เพื่อความบันเทิง) =================
+const FORT=[
+ {lv:'ดีมาก',v:['แสงเทียนส่องทาง สว่างไสวใจ','สิ่งที่ปรารถนา กำลังเดินมาหา']},
+ {lv:'ดีมาก',v:['น้ำไหลลงทะเล พรไหลมาหาเธอ','ทำดีไว้เสมอ โชคจะเผยตัวเอง']},
+ {lv:'ดี',v:['ดอกบัวพ้นโคลนตม งามสง่ากลางสายน้ำ','ความอดทนวันนี้ จะผลิบานในวันหน้า']},
+ {lv:'ดี',v:['ใจดีมีมิตรมาก ทางราบรื่นไม่ลำบาก','ยิ้มให้โลกใบนี้ โลกจะยิ้มตอบเธอ']},
+ {lv:'ดีมาก',v:['ลอยทุกข์ไปกับน้ำ รับสุขมากับแสงจันทร์','ฤกษ์งามยามดี สมหวังในไม่ช้า']},
+ {lv:'กลาง',v:['ช้าบ้างไม่เป็นไร ขอให้ไปไม่หยุด','ค่อยๆ ก้าวไป ปลายทางอยู่ไม่ไกล']},
+ {lv:'ดี',v:['งานที่ตั้งใจทำ จะนำผลงามมาให้','อดใจอีกนิดเดียว ความสำเร็จใกล้เข้ามา']},
+ {lv:'ดีมาก',v:['ลมเย็นพัดพาโชค ความรักและมิตรภาพ','ครอบครัวอบอุ่นใจ สุขใดเทียบเท่า']},
+ {lv:'กลาง',v:['เมฆบังจันทร์ชั่วครู่ เดี๋ยวก็สว่างไสว','อย่าเพิ่งท้อใจไป วันใหม่ยังรออยู่']},
+ {lv:'ดี',v:['คำพูดอ่อนหวาน ทำให้งานราบรื่น','ใจเย็นเป็นยาดี แก้ปัญหาได้ทุกอย่าง']},
+ {lv:'ดีมาก',v:['ทองแท้ไม่กลัวไฟ ความดีไม่เคยสูญ','ข่าวดีใกล้เข้ามา ถึงหน้าบ้านเร็วๆ นี้']},
+ {lv:'กลาง',v:['ใช้จ่ายรอบคอบสักนิด ความสุขจะอยู่นาน','ของดีไม่ต้องรีบ ค่อยๆ เลือกให้ใช่']},
+ {lv:'ดี',v:['เพื่อนเก่าจะทักทาย เรื่องดีจะตามมา','ใจกว้างให้อภัย สุขใจไปอีกนาน']},
+ {lv:'ดีมาก',v:['ดาวส่องฟ้าสว่างไสว ดั่งหัวใจที่พองโต','เดินตามความฝันไป ฟ้าเปิดทางให้เสมอ']},
+ {lv:'กลาง',v:['พักใจให้สงบก่อน แล้วค่อยตัดสินใจ','คำตอบที่ใช่ จะมาในวันที่ใจนิ่ง']},
+ {lv:'ดี',v:['ใจที่สงบสุข กายจะแข็งแรงตาม','นอนหลับให้เต็มอิ่ม พรุ่งนี้สดใสเหมือนเดิม']},
+ {lv:'ดีมาก',v:['กระทงลอยไปไกล พรลอยไปถึงฝัน','ทุกคำที่อธิษฐาน มีผู้รับฟังเสมอ']},
+ {lv:'ดี',v:['การเรียนการงานก้าวหน้า ด้วยความเพียรของเธอ','ขอบคุณตัวเองบ้าง ที่สู้มาไกลขนาดนี้']},
+ {lv:'กลาง',v:['ทางแยกมีหลายสาย เลือกสายที่ใจชอบ','ก้าวเล็กๆ ก็พาไปถึงฝั่งได้']},
+ {lv:'ดีมาก',v:['ความรักที่ให้ไป จะย้อนกลับมาเป็นสุข','โสดหรือคู่ ล้วนมีรักรอบกาย']}
+];
+const FORT_RE=/^\s*(เซียมซี|เสี่ยงเซียมซี|เสี่ยงทาย|ดูดวง)/;
+function fortune(p,vip){
+  const pool=vip?FORT.filter(f=>f.lv==='ดีมาก'):FORT,f=pool[Math.floor(Math.random()*pool.length)],n=FORT.indexOf(f)+1;
+  const col=f.lv==='ดีมาก'?'#ffd23f':f.lv==='ดี'?'#9be564':'#cbb6f5';
+  panel={head:'🔮 เซียมซี '+p.name+(vip?' (ใบทอง)':'')+' · ใบที่ '+n+' · '+f.lv,lines:f.v,life:14,col};
+  addScore(p,2);sfx('chime');floats.push({x:p.x,y:p.y-66,t:'🔮 ใบที่ '+n,s:16,c:col,l:2});
+  speak(p.name+' ได้เซียมซีใบที่ '+n+' ระดับ'+f.lv+' ค่ะ '+f.v.join(' '),{pri:1,rate:.92,pitch:1.05,long:1});
 }
 const PRAY=/^\s*(🙏|#พร|อธิษฐาน|สาธุ|ขอพร|ขอให้|ขอ(?!บ|โทษ|ถาม|เลข|หวย))/;
 function handle(m){
@@ -182,33 +225,36 @@ function handle(m){
   const p=getP(m.id,m.name,m.avatar);
   if(m.type==='chat'){
     const t=(m.text||'').trim();if(!t||isBad(t))return;
-    launch(p);
+    if(FORT_RE.test(t)){
+      if(performance.now()<(p.fcd||0)){p.bub='รออีกสักครู่นะ';p.bubT=2.5;return}
+      p.fcd=performance.now()+60000;addTask(p,task('fortune'),true);return;
+    }
     if(PRAY.test(t)){
       const w=t.replace(/^\s*#พร\s*/,'').slice(0,60);
-      p.card=w;p.cardT=7;p.cardPray=true;p.glow=3;addScore(p,3);sfx('chime');
-      prayer={name:p.name,text:w,life:16};
-      for(let i=0;i<3;i++)setTimeout(()=>firework(rnd(120,420),rnd(190,300),'#ffd27a',18),i*250);
+      addTask(p,task('pier',{wish:w}),true);p.glow=3;addScore(p,3);
+      panel={head:'🏮 คำอธิษฐานจาก '+p.name,text:w,life:16,col:'#ffd27a'};
+      for(let i=0;i<2;i++)setTimeout(()=>{const f=FW();firework(f[0],f[1],'#ffd27a',18)},400+i*300);
       speak(p.name+' ขอพรว่า '+w,{pri:1,rate:.9,pitch:1.05});
     }else{
-      p.card=t.slice(0,22);p.cardT=3.5;p.cardPray=false;addScore(p,1);
+      p.bub=t.slice(0,22);p.bubT=3.5;addScore(p,1);
       if(P.tts==='all')speak('คุณ'+p.name+' บอกว่า '+t);
     }
   }
-  else if(m.type==='member'){launch(p)}
-  else if(m.type==='like'){const n=Math.min(m.n||1,20);launch(p);p.boost=Math.min(150,p.boost+22+n*3);addScore(p,n);
-    floats.push({x:p.x,y:LANE[p.lane]-34,t:'+'+n,s:17,c:'#ffe27a',l:1.2})}
+  else if(m.type==='member'){}
+  else if(m.type==='like'){const n=Math.min(m.n||1,20);addScore(p,n);boostK(p,n);addTask(p,task(FLOW[p.ns++%4]));
+    floats.push({x:p.x,y:p.y-60,t:'+'+n,s:17,c:'#ffe27a',l:1.2})}
   else if(m.type==='gift'){
     const d=Math.max(1,m.diamonds||1),tier=d>=300?3:d>=30?2:1;
-    launch(p);p.gold=tier===3?60:tier===2?40:25;p.sc=1;addScore(p,Math.max(10,d));
+    addTask(p,task('pier',{gold:true}),true);if(tier>=2)p.tasks.splice(1,0,task('fortune',{vip:true}));p.gold=30+tier*10;p.glow=20;addScore(p,Math.max(10,d));
     banner={t1:'🎁 '+p.name+' ส่ง '+m.gift+(m.n>1?' ×'+m.n:''),t2:tier===3?'กระทงมหาบุญลอยแล้ว!':'กระทงทองลอยแล้ว!',life:4.5,tier};
     sfx(tier>1?'big':'gold');
     const nf=tier===3?8:tier===2?5:2;
-    for(let i=0;i<nf;i++)setTimeout(()=>{firework(rnd(70,470),rnd(185,320),CL[i%CL.length],36);sfx('boom')},i*300);
+    for(let i=0;i<nf;i++)setTimeout(()=>{const f=FW();firework(f[0],f[1],SAI[i%8],36);sfx('boom')},i*300);
     for(let i=0;i<(tier===3?14:tier===2?6:0);i++)setTimeout(()=>skyLantern(),i*180);
     speak(tier===3?'ขออนุโมทนาบุญกับคุณ'+p.name+' กระทงมหาบุญลอยแล้วค่ะ':'ขอบคุณคุณ'+p.name+' ที่ร่วมลอยกระทงทองค่ะ',{pri:1});
   }
-  else if(m.type==='follow'){launch(p);addScore(p,3);p.glow=4;floats.push({x:p.x,y:LANE[p.lane]-34,t:'🕯️ ผู้ร่วมลอย',s:16,c:'#ffd9a0',l:1.8})}
-  else if(m.type==='share'){launch(p);addScore(p,3);skyLantern(p.x>0?p.x:rnd(60,480),LIM);floats.push({x:p.x,y:LANE[p.lane]-34,t:'🏮 แบ่งบุญ',s:16,c:'#ffd9a0',l:1.8})}
+  else if(m.type==='follow'){addScore(p,3);p.glow=4;addTask(p,task('pray'));floats.push({x:p.x,y:p.y-60,t:'🕯️ ผู้ร่วมบุญ',s:16,c:'#ffd9a0',l:1.8})}
+  else if(m.type==='share'){addScore(p,3);addTask(p,task('lantern'));floats.push({x:p.x,y:p.y-60,t:'🏮 แบ่งบุญ',s:16,c:'#ffd9a0',l:1.8})}
 }
 
 // ================= เชื่อมกับตัวรับข้อมูลจาก TikTok =================
@@ -229,54 +275,109 @@ function demo(type,dia){
   const nm=NAMES[Math.floor(Math.random()*NAMES.length)],id=type==='member'?nm+Math.floor(Math.random()*999):nm;
   const pick=a=>a[Math.floor(Math.random()*a.length)];
   if(type==='pray')return handle({type:'chat',id,name:nm,text:pick(WISH)});
+  if(type==='fortune')return handle({type:'chat',id:id+Math.floor(Math.random()*99),name:nm,text:'เซียมซี'});
   handle({type,id,name:nm,text:pick(['สู้ๆ','สวยมากเลย','555','สวัสดีทุกคน']),n:5,gift:dia?'Universe':'Rose',diamonds:dia||1});
 }
 
 // ================= อัปเดต =================
 function update(dt){
   for(const p of ppl.values()){
-    p.glow-=dt;p.cardT-=dt;p.gold-=dt;
-    if(!p.k)continue;
-    p.sc=Math.min(1,p.sc+dt*1.5);p.boost*=Math.exp(-.5*dt);p.x+=(p.spd+p.boost)*dt;
-    if(p.boost>40&&Math.random()<.5)parts.push({x:p.x-20,y:LANE[p.lane]+8,vx:rnd(-15,0),vy:rnd(-20,-5),l:.6,c:'#ffe9a8',g:0,add:1});
-    if(p.x>W+50){p.k=false;p.done++}
+    p.glow-=dt;p.bubT-=dt;p.gold-=dt;p.mv=false;
+    if(p.act>0){p.act-=dt;if(p.act<=0)p.pose=''}
+    else if(p.tasks.length){
+      const t=p.tasks[0],S=ST[t.s];
+      if(mv(p,S.x+t.ox,S.y+t.oy,90,dt)){p.act=t.s==='fortune'?2.4:1.8;p.pose=t.s;doAct(p,t);p.tasks.shift()}
+    }else{
+      p.wt-=dt;if(p.wt<=0){p.wt=rnd(2,6);p.tx=rnd(30,510);p.ty=rnd(CY0,CY1)}
+      mv(p,p.tx,p.ty,30,dt);
+    }
   }
+  for(const k of krs){k.sc=Math.min(1,k.sc+dt*1.5);k.boost*=Math.exp(-.5*dt);k.x+=(k.spd+k.boost)*dt;k.cardT-=dt;k.gold-=dt;
+    if(k.boost>40&&Math.random()<.5)parts.push({x:k.x-20,y:LANE[k.lane]+8,vx:rnd(-15,0),vy:rnd(-20,-5),l:.6,c:'#ffe9a8',g:0,add:1})}
+  krs=krs.filter(k=>k.x<W+50);
+  if(ST.fortune.sh>0)ST.fortune.sh-=dt;if(ST.bell.sw>0)ST.bell.sw-=dt;if(ST.pray.gl>0)ST.pray.gl-=dt;
   for(const l of lants){l.age+=dt;l.y-=l.sp*dt;l.x+=Math.sin(l.age*1.1+l.sd)*14*dt}
-  lants=lants.filter(l=>l.y>150);
+  lants=lants.filter(l=>l.y>200);
   for(const f of floats){f.l-=dt;f.y-=24*dt}floats=floats.filter(f=>f.l>0);
   parts=parts.filter(p=>(p.l-=dt)>0);for(const p of parts){p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.985}
   if(banner&&(banner.life-=dt)<=0)banner=null;
-  if(prayer&&(prayer.life-=dt)<=0)prayer=null;
+  if(panel&&(panel.life-=dt)<=0)panel=null;
+}
+function mv(p,tx,ty,sp,dt){const dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy);if(d>3){p.x+=dx/d*sp*dt;p.y+=dy/d*sp*dt;p.walk+=dt*9;p.mv=true;if(Math.abs(dx)>1)p.dir=dx>0?1:-1;return false}return true}
+function doAct(p,t){
+  const S=ST[t.s],n=Math.max(1,p.pend);p.pend=0;
+  floats.push({x:p.x,y:p.y-66,t:'+'+n+' บุญ',s:15,c:'#ffe27a',l:1.8});
+  if(t.s==='pray'){ST.pray.gl=2.5;sfx('chime');floats.push({x:S.x,y:S.y-70,t:'🙏 สาธุ',s:20,c:'#fff',l:1.6})}
+  else if(t.s==='bell'){ST.bell.sw=1.6;sfx('bell');burst(S.x,330,'#ffe9a8',14,120)}
+  else if(t.s==='lantern'){skyLantern(S.x+rnd(-14,14),S.y-40);sfx('gold');floats.push({x:S.x,y:S.y-72,t:'🏮 ปล่อยโคม',s:16,c:'#ffd9a0',l:1.6})}
+  else if(t.s==='fortune'){ST.fortune.sh=1.6;sfx('rattle');setTimeout(()=>{sfx('stick');fortune(p,t.vip)},1600)}
+  else if(t.s==='pier'){makeK(p,t);sfx(t.gold?'big':'plop');burst(S.x+52,490,'#cfe8ff',10,90,120);
+    if(t.gold){burst(S.x+52,480,'#ffd23f',30,200,60)}}
 }
 
 // ================= ฉากพื้นหลัง (วาดครั้งเดียว) =================
 const bgc=document.createElement('canvas');bgc.width=W;bgc.height=H;
 (function(){
   const x=bgc.getContext('2d');
-  let gr=x.createLinearGradient(0,0,0,GY);gr.addColorStop(0,'#090520');gr.addColorStop(.55,'#271350');gr.addColorStop(1,'#7a3a6a');
-  x.fillStyle=gr;x.fillRect(0,0,W,GY+2);
-  for(let i=0;i<130;i++){x.fillStyle='rgba(255,255,255,'+(.25+Math.random()*.6)+')';const r=Math.random()<.1?1.8:1.1;x.fillRect(rnd(0,W),rnd(0,GY-30),r,r)}
-  let mgr=x.createRadialGradient(440,312,8,440,312,130);mgr.addColorStop(0,'rgba(255,240,190,.5)');mgr.addColorStop(1,'rgba(255,240,190,0)');
-  x.fillStyle=mgr;x.fillRect(300,180,240,240);
-  x.fillStyle='#fff6d6';x.beginPath();x.arc(440,312,32,0,6.28);x.fill();
-  x.fillStyle='rgba(200,170,120,.18)';[[430,304,7],[450,320,5],[436,322,4]].forEach(a=>{x.beginPath();x.arc(a[0],a[1],a[2],0,6.28);x.fill()});
-  // เงาวัดริมแม่น้ำ
-  x.fillStyle='#120826';
-  const prang=(cx,h)=>{x.beginPath();x.moveTo(cx-26,GY);x.lineTo(cx-22,GY-h*.3);x.lineTo(cx-12,GY-h*.52);x.lineTo(cx-8,GY-h*.76);x.lineTo(cx,GY-h);x.lineTo(cx+8,GY-h*.76);x.lineTo(cx+12,GY-h*.52);x.lineTo(cx+22,GY-h*.3);x.lineTo(cx+26,GY);x.fill()};
-  prang(110,108);prang(60,72);prang(160,72);
-  x.beginPath();x.moveTo(200,GY);x.lineTo(250,GY-48);x.lineTo(300,GY);x.fill();
-  x.beginPath();x.moveTo(214,GY-30);x.lineTo(250,GY-62);x.lineTo(286,GY-30);x.fill();x.fillRect(212,GY-24,76,24);
-  [[340,24],[372,30],[508,28],[300,16]].forEach(a=>{x.beginPath();x.arc(a[0],GY-a[1]*.5,a[1],0,6.28);x.fill()});
-  x.fillRect(0,GY-6,W,8);
-  x.fillStyle='#ffd27a';[[104,GY-40],[116,GY-40],[240,GY-12],[262,GY-12],[56,GY-16],[168,GY-16]].forEach(a=>x.fillRect(a[0],a[1],3,5));
-  // แม่น้ำ
-  gr=x.createLinearGradient(0,GY,0,H);gr.addColorStop(0,'#33276b');gr.addColorStop(.3,'#1b1448');gr.addColorStop(1,'#080618');
-  x.fillStyle=gr;x.fillRect(0,GY,W,H-GY);
-  x.fillStyle='rgba(255,210,120,.5)';for(let i=0;i<40;i++){x.fillRect(rnd(0,W),GY+rnd(2,10),2,2)}
-  // ริมตลิ่งด้านหน้า (ส่วนตกแต่ง ไม่มีข้อมูลสำคัญ)
-  x.fillStyle='#07040f';x.beginPath();x.moveTo(0,H);x.lineTo(0,900);x.quadraticCurveTo(140,872,270,902);x.quadraticCurveTo(410,930,W,890);x.lineTo(W,H);x.fill();
-  for(let i=0;i<26;i++){const bx=rnd(0,W),by=rnd(890,945);x.strokeStyle='#0f2a1c';x.lineWidth=2;x.beginPath();x.moveTo(bx,by+30);x.quadraticCurveTo(bx+rnd(-8,8),by+10,bx+rnd(-12,12),by-rnd(10,34));x.stroke()}
-  [[70,846],[210,870],[400,860],[480,880]].forEach(a=>{x.fillStyle='#134d36';x.beginPath();x.ellipse(a[0],a[1],38,11,0,0,6.28);x.fill();x.fillStyle='#f48fb1';for(let k=0;k<5;k++){x.beginPath();x.ellipse(a[0]+(k-2)*5,a[1]-8,4,9,(k-2)*.25,0,6.28);x.fill()}});
+  const vg=(y0,y1,st)=>{const gr=x.createLinearGradient(0,y0,0,y1);st.forEach(s=>gr.addColorStop(s[0],s[1]));return gr};
+  const hg=(x0,x1,st)=>{const gr=x.createLinearGradient(x0,0,x1,0);st.forEach(s=>gr.addColorStop(s[0],s[1]));return gr};
+  const GOLD=[[0,'#9a6a0c'],[.45,'#f8dd7a'],[1,'#b8820f']];
+  x.fillStyle=vg(0,480,[[0,'#07041a'],[.45,'#24104a'],[1,'#7a3a6a']]);x.fillRect(0,0,W,480);
+  for(let i=0;i<110;i++){x.fillStyle='rgba(255,255,255,'+(.25+Math.random()*.6)+')';const r=Math.random()<.1?1.8:1.1;x.fillRect(rnd(0,W),rnd(0,300),r,r)}
+  // พระจันทร์
+  let m=x.createRadialGradient(208,262,5,208,262,70);m.addColorStop(0,'rgba(255,240,190,.5)');m.addColorStop(1,'rgba(255,240,190,0)');x.fillStyle=m;x.fillRect(138,192,140,140);
+  x.fillStyle='#fff6d6';x.beginPath();x.arc(208,262,17,0,6.28);x.fill();
+  // แนวต้นไม้ไกล
+  x.fillStyle='#160b2e';for(let i=0;i<14;i++){x.beginPath();x.arc(i*42+10,386,rnd(14,24),0,6.28);x.fill()}x.fillRect(0,384,W,10);
+  // ----- เจดีย์ทอง -----
+  x.fillStyle=hg(98,172,GOLD);x.fillRect(98,376,74,16);x.fillRect(106,360,58,16);x.fillRect(113,346,44,14);
+  x.beginPath();x.moveTo(115,346);x.quadraticCurveTo(113,298,135,282);x.quadraticCurveTo(157,298,155,346);x.fill();
+  x.fillRect(130,264,10,20);x.fillRect(124,262,22,4);x.fillRect(127,276,16,3);
+  x.beginPath();x.moveTo(135,226);x.lineTo(130,264);x.lineTo(140,264);x.fill();
+  x.strokeStyle='rgba(90,55,5,.7)';x.lineWidth=1;x.strokeRect(98,376,74,16);x.strokeRect(106,360,58,16);x.strokeRect(113,346,44,14);
+  x.fillStyle='rgba(255,255,255,.35)';x.fillRect(125,296,4,46);
+  // ----- อุโบสถ -----
+  x.fillStyle='#b9a37a';x.fillRect(215,384,170,9);
+  x.fillStyle='#f6e7bd';x.fillRect(230,342,140,42);x.fillStyle=hg(230,370,GOLD);[230,262,300,338,366].forEach(px=>x.fillRect(px-2,342,4,42));
+  x.fillStyle='#5a1a1a';x.beginPath();x.moveTo(290,384);x.lineTo(290,364);x.quadraticCurveTo(300,350,310,364);x.lineTo(310,384);x.fill();
+  x.strokeStyle='#d9a21b';x.lineWidth=2;x.stroke();
+  x.fillStyle='#ffcf6b';x.fillRect(244,356,14,20);x.fillRect(342,356,14,20);
+  const roof=(l,a,b,c,col)=>{x.fillStyle=col;x.beginPath();x.moveTo(l[0],l[1]);x.lineTo(a[0],a[1]);x.lineTo(b[0],b[1]);x.closePath();x.fill();x.strokeStyle='#f6d365';x.lineWidth=2.5;x.stroke();
+    x.fillStyle='#f6d365';x.beginPath();x.moveTo(l[0],l[1]);x.lineTo(l[0]-8,l[1]-9);x.lineTo(l[0]+8,l[1]-3);x.fill();x.beginPath();x.moveTo(b[0],b[1]);x.lineTo(b[0]+8,b[1]-9);x.lineTo(b[0]-8,b[1]-3);x.fill()};
+  roof([212,346],[300,308],[388,346],0,'#b5172b');x.fillStyle='#d9a21b';x.fillRect(212,344,176,4);
+  roof([232,318],[300,280],[368,318],0,'#1f7a5a');
+  roof([254,292],[300,258],[346,292],0,'#b5172b');
+  x.strokeStyle='#f6d365';x.lineWidth=3;x.beginPath();x.moveTo(300,258);x.lineTo(300,236);x.stroke();x.fillStyle='#f6d365';x.beginPath();x.arc(300,235,3,0,6.28);x.fill();
+  ['#ff5a5f','#ffd23f','#ff9a3c','#7ae7c7'].forEach((c,k)=>{for(let i=0;i<9;i++){if((i+k)%4)continue;x.fillStyle=c;x.beginPath();x.roundRect(222+i*19,350,9,13,4);x.fill()}});
+  // ----- หอระฆัง -----
+  x.fillStyle='#7a4a2a';x.fillRect(392,344,5,48);x.fillRect(433,344,5,48);x.fillRect(392,356,46,4);
+  roof([380,348],[415,318],[450,348],0,'#b5172b');
+  // ----- มุมปล่อยโคม -----
+  x.fillStyle='#8a5a34';x.fillRect(468,424,70,10);x.fillRect(474,384,5,42);x.fillRect(527,384,5,42);x.fillRect(474,384,58,5);
+  [[484,'#fff1c9'],[496,'#ffb35a'],[508,'#fff1c9'],[520,'#ffb35a']].forEach(a=>{x.fillStyle=a[1];x.beginPath();x.roundRect(a[0]-5,393,11,17,4);x.fill();x.fillStyle='rgba(255,170,60,.35)';x.beginPath();x.arc(a[0],401,12,0,6.28);x.fill()});
+  x.fillStyle='#7a1020';x.beginPath();x.roundRect(472,364,62,17,5);x.fill();x.strokeStyle='#f6d365';x.lineWidth=1.5;x.stroke();
+  x.font='bold 13px '+FONT;x.textAlign='center';x.textBaseline='middle';x.fillStyle='#ffe9a8';x.fillText('มุมปล่อยโคม',503,373);
+  // ----- ลานวัด -----
+  x.fillStyle=vg(392,470,[[0,'#9a8290'],[1,'#5a4766']]);x.fillRect(0,392,W,80);
+  x.strokeStyle='rgba(255,255,255,.07)';x.lineWidth=1;for(let y=410;y<466;y+=12){x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}
+  let wg=x.createRadialGradient(300,400,10,300,400,170);wg.addColorStop(0,'rgba(255,205,120,.35)');wg.addColorStop(1,'rgba(255,205,120,0)');x.fillStyle=wg;x.fillRect(120,380,360,90);
+  // เสาโคมไฟ
+  [[18,'#ff7a3c'],[262,'#ffcf6b'],[344,'#ffcf6b'],[462,'#ff7a3c']].forEach(a=>{x.fillStyle='#3a2a2a';x.fillRect(a[0]-1.5,404,3,34);x.fillStyle=a[1];x.shadowColor=a[1];x.shadowBlur=14;x.beginPath();x.arc(a[0],402,6,0,6.28);x.fill();x.shadowBlur=0});
+  // ซุ้มเซียมซี
+  x.fillStyle='#7a1020';x.beginPath();x.moveTo(172,402);x.lineTo(200,388);x.lineTo(228,402);x.closePath();x.fill();x.strokeStyle='#f6d365';x.lineWidth=2;x.stroke();
+  x.fillStyle='#5a3a1c';x.fillRect(176,402,3,24);x.fillRect(221,402,3,24);x.fillStyle='#c1121f';x.fillRect(178,414,44,12);x.fillStyle='#f6d365';x.fillRect(178,414,44,2);
+  x.fillStyle='#7a1020';x.beginPath();x.roundRect(181,392,38,13,4);x.fill();x.font='bold 12px '+FONT;x.fillStyle='#ffe9a8';x.textAlign='center';x.textBaseline='middle';x.fillText('เซียมซี',200,399);
+  // ตลิ่ง + ท่าน้ำ
+  x.fillStyle='#4a3b56';x.fillRect(0,466,W,10);x.fillStyle='#8c78a0';x.fillRect(0,466,W,2);
+  x.fillStyle='#9a6a3c';x.fillRect(24,458,206,16);x.strokeStyle='rgba(60,30,10,.5)';x.lineWidth=1;for(let px=36;px<230;px+=14){x.beginPath();x.moveTo(px,458);x.lineTo(px,474);x.stroke()}
+  x.fillStyle='#5a3a1c';[30,124,224].forEach(px=>x.fillRect(px-3,446,6,34));
+  [[30,'#ff8a3c'],[224,'#ff8a3c']].forEach(a=>{x.fillStyle=a[1];x.shadowColor=a[1];x.shadowBlur=16;x.beginPath();x.arc(a[0],442,6,0,6.28);x.fill();x.shadowBlur=0});
+  x.fillStyle='#7a1020';x.beginPath();x.roundRect(64,430,64,16,5);x.fill();x.strokeStyle='#f6d365';x.lineWidth=1.5;x.stroke();
+  x.font='bold 13px '+FONT;x.fillStyle='#ffe9a8';x.fillText('ท่าน้ำวัด',96,438);
+  // ----- แม่น้ำ -----
+  x.fillStyle=vg(476,H,[[0,'#2f2468'],[.3,'#150f3a'],[1,'#080618']]);x.fillRect(0,476,W,H-476);
+  x.fillStyle='#07040f';x.beginPath();x.moveTo(0,H);x.lineTo(0,905);x.quadraticCurveTo(140,880,270,908);x.quadraticCurveTo(410,934,W,896);x.lineTo(W,H);x.fill();
+  [[70,850],[220,876],[400,866],[486,884]].forEach(a=>{x.fillStyle='#134d36';x.beginPath();x.ellipse(a[0],a[1],36,10,0,0,6.28);x.fill();x.fillStyle='#f48fb1';for(let k=0;k<5;k++){x.beginPath();x.ellipse(a[0]+(k-2)*5,a[1]-8,4,9,(k-2)*.25,0,6.28);x.fill()}});
 })();
 
 // ================= วาด =================
@@ -287,6 +388,7 @@ function txt(s,x,y,size,color,align,stroke){
 }
 function rr(x,y,w,h,r){g.beginPath();g.roundRect(x,y,w,h,r)}
 function ell(x,y,rx,ry,c){g.fillStyle=c;g.beginPath();g.ellipse(x,y,rx,ry,0,0,6.28);g.fill()}
+function halo(x,y,r,c){const h=g.createRadialGradient(x,y,2,x,y,r);h.addColorStop(0,c);h.addColorStop(1,'rgba(255,200,80,0)');g.fillStyle=h;g.fillRect(x-r,y-r,2*r,2*r)}
 function wrap(s,maxW,size,maxL){
   g.font='bold '+size+'px '+FONT;const L=[];let cur='';
   for(const ch of s){if(g.measureText(cur+ch).width>maxW){L.push(cur);cur=ch;if(L.length>=maxL)break}else cur+=ch}
@@ -295,72 +397,134 @@ function wrap(s,maxW,size,maxL){
   return L;
 }
 function water(t){
-  g.save();g.beginPath();g.rect(0,GY,W,H-GY);g.clip();
-  for(let i=0;i<24;i++){const y=GY+8+i*15,w=34-i*.9+Math.sin(t*2+i)*9,a=Math.max(0,.4-i*.017);
-    g.fillStyle='rgba(255,236,180,'+a+')';g.fillRect(440-w/2+Math.sin(t*1.5+i)*7,y,w,3)}
-  g.fillStyle='rgba(255,255,255,.07)';
-  for(let i=0;i<30;i++){const y=GY+16+(i*41)%(H-GY-30),x=((i*97)+t*(6+(i%3)*5))%(W+90)-45;g.fillRect(x,y,36+(i%4)*14,2)}
+  g.save();g.beginPath();g.rect(0,476,W,H-476);g.clip();
+  [[135,'255,225,140'],[300,'255,200,110'],[415,'255,150,110'],[502,'255,190,100'],[30,'255,140,60'],[224,'255,140,60']].forEach((c,j)=>{
+    for(let i=0;i<9;i++){const w=16-i*1.3+Math.sin(t*2+i+j)*3,a=Math.max(0,.3-i*.03);g.fillStyle='rgba('+c[1]+','+a+')';g.fillRect(c[0]-w/2+Math.sin(t*1.5+i+j)*4,480+i*13,w,3)}});
+  g.fillStyle='rgba(255,255,255,.06)';
+  for(let i=0;i<30;i++){const y=484+(i*41)%(H-500),x=((i*97)+t*(6+(i%3)*5))%(W+90)-45;g.fillRect(x,y,36+(i%4)*14,2)}
   g.restore();
 }
-function drawK(p,t){
-  const s=(.74+p.lane*.1)*(p.gold>0?1.35:1)*(.25+.75*p.sc),x=p.x,y=LANE[p.lane]+Math.sin(t*1.4+p.seed)*2.5;
-  const gold=p.gold>0,col=gold?'#ffd23f':p.color;
+function miniK(x,y,s){ell(x,y+2*s,6*s,2.4*s,'#3b8f4a');for(let i=-1;i<=1;i++)ell(x+i*3*s,y-1.5*s,2*s,3.4*s,'#ff9ec0');ell(x,y-5*s,1.2*s,2.4*s,'#ffcf6b')}
+function drawPerson(p,t){
+  const s=.8+.3*Math.max(0,Math.min(1,(p.y-CY0)/(CY1-CY0+14))),x=p.x,y=p.y;
+  const sw=p.mv?Math.sin(p.walk):0,bob=p.mv?Math.abs(Math.sin(p.walk))*1.5*s:(p.act>0?Math.abs(Math.sin(p.act*5))*1.2*s:0);
+  ell(x,y+1,12*s,3.5*s,'rgba(0,0,0,.3)');
+  if(p.gold>0||p.glow>0)halo(x,y-30*s,50*s,p.gold>0?'rgba(255,215,80,.55)':'rgba(255,200,120,.4)');
+  if(p.male){
+    g.fillStyle=p.sin;rr(x-7*s+sw*2*s,y-24*s,6.2*s,24*s,2*s);g.fill();rr(x+.8*s-sw*2*s,y-24*s,6.2*s,24*s,2*s);g.fill();
+    g.fillStyle='#ffd23f';g.fillRect(x-7*s,y-26*s-bob,14*s,2.2*s);
+  }else{
+    g.fillStyle=p.sin;g.beginPath();g.moveTo(x-7*s,y-26*s-bob);g.lineTo(x+7*s,y-26*s-bob);g.lineTo(x+12.5*s+sw*s,y);g.lineTo(x-12.5*s+sw*s,y);g.fill();
+    g.fillStyle='#ffd23f';g.beginPath();g.moveTo(x-11.6*s+sw*s,y-4*s);g.lineTo(x+11.6*s+sw*s,y-4*s);g.lineTo(x+12.5*s+sw*s,y);g.lineTo(x-12.5*s+sw*s,y);g.fill();
+  }
+  const ty=y-45*s-bob;
+  g.fillStyle=p.male?'#f7ecd0':'#fff3e0';rr(x-6.5*s,ty,13*s,20*s,3*s);g.fill();
+  if(p.male){g.fillStyle='#d9a21b';for(let i=0;i<3;i++){g.beginPath();g.arc(x,ty+4*s+i*5*s,1.1*s,0,6.28);g.fill()}g.fillStyle=p.sai;g.fillRect(x-6.5*s,ty+17*s,13*s,3*s)}
+  else{g.fillStyle=p.sai;g.beginPath();g.moveTo(x-6.5*s,ty);g.lineTo(x-1*s,ty);g.lineTo(x+6.5*s,ty+20*s);g.lineTo(x+1*s,ty+20*s);g.fill();g.fillRect(x-7.5*s,ty-.5*s,5.5*s,6*s);g.strokeStyle='#ffd23f';g.lineWidth=1;g.beginPath();g.moveTo(x-1*s,ty);g.lineTo(x+6.5*s,ty+20*s);g.stroke()}
+  g.strokeStyle=p.skin;g.lineWidth=2.6*s;g.lineCap='round';
+  const wai=p.act>0&&(p.pose==='pray'||p.pose==='bell'),up=p.act>0&&p.pose==='lantern',fw=p.act>0&&p.pose==='pier',fs=p.act>0&&p.pose==='fortune';
+  if(wai){g.beginPath();g.moveTo(x-6*s,ty+3*s);g.lineTo(x,ty+8*s);g.lineTo(x+6*s,ty+3*s);g.stroke();ell(x,ty+8*s,2.4*s,3*s,p.skin)}
+  else if(up){g.beginPath();g.moveTo(x-6*s,ty+3*s);g.lineTo(x-4*s,ty-9*s);g.moveTo(x+6*s,ty+3*s);g.lineTo(x+4*s,ty-9*s);g.stroke();if(p.act>.9){g.fillStyle='#ffb35a';g.beginPath();g.roundRect(x-5*s,ty-20*s,10*s,13*s,3*s);g.fill()}}
+  else if(fs){const j=Math.sin(t*28)*3*s;g.beginPath();g.moveTo(x-6*s,ty+3*s);g.lineTo(x-2*s,ty+2*s+j);g.moveTo(x+6*s,ty+3*s);g.lineTo(x+2*s,ty+2*s-j);g.stroke();g.fillStyle='#d9a21b';rr(x-3*s,ty-3*s+j,6*s,11*s,1.5*s);g.fill()}
+  else if(fw){g.beginPath();g.moveTo(x-6*s,ty+3*s);g.lineTo(x-4*s+p.dir*9*s,ty+15*s);g.moveTo(x+6*s,ty+3*s);g.lineTo(x+4*s+p.dir*9*s,ty+15*s);g.stroke()}
+  else{g.beginPath();g.moveTo(x-6.5*s,ty+3*s);g.lineTo(x-8*s-sw*2*s,ty+16*s);g.moveTo(x+6.5*s,ty+3*s);g.lineTo(x+8*s+sw*2*s,ty+16*s);g.stroke()}
+  g.lineCap='butt';
+  if(p.tasks.length&&p.tasks[0].s==='pier'&&p.act<=0)miniK(x+p.dir*10*s,ty+16*s,s*1.1);
+  const hy=ty-8*s,hr=8.6*s;
+  g.fillStyle=p.skin;g.fillRect(x-2*s,hy+5*s,4*s,5*s);
+  g.fillStyle=p.skin;g.beginPath();g.arc(x,hy,hr,0,6.28);g.fill();
+  if(p.img){g.save();g.beginPath();g.arc(x,hy,hr,0,6.28);g.clip();try{g.drawImage(p.img,x-hr,hy-hr,2*hr,2*hr)}catch(e){}g.restore()}
+  else{g.fillStyle='#1e1410';g.beginPath();g.arc(x,hy-.8*s,hr+.5*s,3.35,6.07);g.fill()}
+  if(p.male){if(!p.img){g.fillStyle='#1e1410';g.beginPath();g.arc(x,hy-2*s,hr,3.3,6.1);g.fill()}}
+  else{ell(x+2*s,hy-hr-2*s,4.6*s,3.6*s,'#1e1410');g.fillStyle='#ffd23f';g.beginPath();g.arc(x+4.5*s,hy-hr-2*s,1.8*s,0,6.28);g.fill();g.fillStyle='#fff';g.beginPath();g.arc(x-1*s,hy-hr+.5*s,1.4*s,0,6.28);g.fill()}
+  if(p.gold>0){g.fillStyle='#ffd23f';g.beginPath();g.moveTo(x-6*s,hy-hr-1*s);g.lineTo(x-4*s,hy-hr-9*s);g.lineTo(x-1.5*s,hy-hr-3*s);g.lineTo(x,hy-hr-11*s);g.lineTo(x+1.5*s,hy-hr-3*s);g.lineTo(x+4*s,hy-hr-9*s);g.lineTo(x+6*s,hy-hr-1*s);g.fill()}
+  txt(p.name,x,y+11*s,12,'#fff');
+  if(p.bubT>0&&p.bub){
+    g.font='bold 13px '+FONT;const w=g.measureText(p.bub).width+18,by=hy-hr-18*s,cx=Math.max(w/2+4,Math.min(W-w/2-4,x));
+    g.globalAlpha=Math.min(1,p.bubT);g.fillStyle='#fff';rr(cx-w/2,by-12,w,24,12);g.fill();txt(p.bub,cx,by,13,'#2a0f4d','center',false);g.globalAlpha=1;
+  }
+}
+function drawK(k,t){
+  const s=(.7+k.lane*.09)*(k.gold>0?1.35:1)*(.25+.75*k.sc),x=k.x,y=LANE[k.lane]+Math.sin(t*1.4+k.seed)*2.5;
+  const gold=k.gold>0,col=gold?'#ffd23f':k.color;
   g.globalAlpha=.28;ell(x,y+24*s,28*s,8*s,'#ffb347');g.globalAlpha=1;
-  if(gold||p.glow>0){const hg=g.createRadialGradient(x,y-8*s,4,x,y-8*s,58*s);hg.addColorStop(0,gold?'rgba(255,215,80,.55)':'rgba(255,200,120,.4)');hg.addColorStop(1,'rgba(255,200,80,0)');g.fillStyle=hg;g.fillRect(x-60*s,y-70*s,120*s,120*s)}
+  if(gold)halo(x,y-8*s,58*s,'rgba(255,215,80,.55)');else if(k.cardT>0)halo(x,y-8*s,46*s,'rgba(255,200,120,.35)');
   ell(x,y+9*s,29*s,10*s,'#2f7d3c');ell(x,y+6*s,26*s,8.5*s,'#4aa857');
-  const petal=(a)=>{const px=x+Math.cos(a)*18*s,py=y+3*s+Math.sin(a)*5*s;g.fillStyle=col;g.beginPath();g.ellipse(px,py-7*s,5.4*s,10*s,Math.cos(a)*.5,0,6.28);g.fill();g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1;g.stroke()};
-  const n=8,off=p.seed*.2;
+  const petal=a=>{const px=x+Math.cos(a)*18*s,py=y+3*s+Math.sin(a)*5*s;g.fillStyle=col;g.beginPath();g.ellipse(px,py-7*s,5.4*s,10*s,Math.cos(a)*.5,0,6.28);g.fill();g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=1;g.stroke()};
+  const n=8,off=k.seed*.2;
   for(let i=0;i<n;i++){const a=i/n*6.283+off;if(Math.sin(a)<0)petal(a)}
   g.fillStyle='#fff3c4';g.fillRect(x-2.2*s,y-16*s,4.4*s,15*s);
   g.strokeStyle='#8b2f2f';g.lineWidth=1.6*s;g.beginPath();g.moveTo(x+9*s,y+2*s);g.lineTo(x+11*s,y-24*s);g.stroke();g.fillStyle='#ff5a3c';g.fillRect(x+10*s,y-26*s,2.2*s,3*s);
-  const fl=1+Math.sin(t*9+p.seed)*.15;g.shadowColor='#ffb347';g.shadowBlur=16;ell(x,y-21*s,3.2*s,6*s*fl,'#ffcf6b');g.shadowBlur=0;ell(x,y-20*s,1.6*s,3.4*s*fl,'#fff7d6');
+  const fl=1+Math.sin(t*9+k.seed)*.15;g.shadowColor='#ffb347';g.shadowBlur=16;ell(x,y-21*s,3.2*s,6*s*fl,'#ffcf6b');g.shadowBlur=0;ell(x,y-20*s,1.6*s,3.4*s*fl,'#fff7d6');
   for(let i=0;i<n;i++){const a=i/n*6.283+off;if(Math.sin(a)>=0)petal(a)}
-  if(p.img){g.save();g.beginPath();g.arc(x,y+8*s,7.5*s,0,6.28);g.clip();try{g.drawImage(p.img,x-7.5*s,y+.5*s,15*s,15*s)}catch(e){}g.restore();g.strokeStyle='#fff';g.lineWidth=1.4;g.beginPath();g.arc(x,y+8*s,7.5*s,0,6.28);g.stroke()}
-  txt(p.name,x,y+28*s,15,'#fff');
-  if(p.cardT>0&&p.card){
-    g.font='bold 15px '+FONT;const w=g.measureText(p.card).width+22,cy=y-44*s;
-    const cx=Math.max(w/2+6,Math.min(W-w/2-6,x));g.globalAlpha=Math.min(1,p.cardT);g.fillStyle=p.cardPray?'#ffe9a8':'#fff';rr(cx-w/2,cy-14,w,28,14);g.fill();
-    txt((p.cardPray?'🏮 ':'')+p.card,cx,cy,15,'#3a1450','center',false);g.globalAlpha=1;
+  if(gold||k.cardT>0)txt(k.name,x,y+28*s,13,'#fff');
+  if(k.cardT>0&&k.card){
+    g.font='bold 15px '+FONT;const w=g.measureText(k.card).width+22,cy=y-44*s,cx=Math.max(w/2+6,Math.min(W-w/2-6,x));
+    g.globalAlpha=Math.min(1,k.cardT);g.fillStyle='#ffe9a8';rr(cx-w/2,cy-14,w,28,14);g.fill();txt('🏮 '+k.card,cx,cy,15,'#3a1450','center',false);g.globalAlpha=1;
   }
+}
+function drawStations(t){
+  // โต๊ะธูปเทียนหน้าอุโบสถ
+  const gl=ST.pray.gl>0;if(gl)halo(300,400,60,'rgba(255,210,120,.5)');
+  g.fillStyle='#7a1020';rr(280,404,40,12,3);g.fill();
+  [288,312].forEach((cx,i)=>{g.fillStyle='#fff3c4';g.fillRect(cx-2,394,4,10);const fl=1+Math.sin(t*9+i)*.2;g.shadowColor='#ffb347';g.shadowBlur=10;ell(cx,391,2.2,4.2*fl,'#ffcf6b');g.shadowBlur=0});
+  // ระฆังแกว่ง
+  const a=Math.sin(t*11)*.35*Math.max(0,ST.bell.sw||0);
+  g.save();g.translate(415,358);g.rotate(a);
+  g.fillStyle='#d9a21b';g.beginPath();g.moveTo(-3,0);g.lineTo(3,0);g.quadraticCurveTo(10,10,12,26);g.lineTo(-12,26);g.quadraticCurveTo(-10,10,-3,0);g.fill();
+  g.fillStyle='#f6d365';g.fillRect(-12,24,24,3);g.restore();
+  // กระบอกเซียมซี
+  const sh=Math.max(0,ST.fortune.sh||0),fx=210,fy=412;
+  g.save();g.translate(fx,fy);g.rotate(Math.sin(t*30)*.18*Math.min(1,sh));
+  g.fillStyle='#b5172b';g.fillRect(-4,-10,8,12);g.fillStyle='#d9a21b';g.fillRect(-4,-10,8,2);
+  g.fillStyle='#f3e2b3';[-2,0,2].forEach(o=>g.fillRect(o-.5,-17-(sh>0?Math.abs(Math.sin(t*30+o))*3:0),1.2,8));g.restore();
+  // โคมแขวนระยิบ
+  for(let i=0;i<9;i++){const xx=227+i*19;g.globalAlpha=.5+.5*Math.sin(t*3+i);g.fillStyle='#fff2b0';g.beginPath();g.arc(xx,347,1.8,0,6.28);g.fill()}g.globalAlpha=1;
 }
 function draw(){
   const t=performance.now()/1000;
-  g.drawImage(bgc,0,0);water(t);
-  // ส่วนหัว (อยู่ในโซนปลอดภัยเหนือช่องคอมเมนต์)
-  txt('🪷 ลอยกระทง LIVE',W/2,52,36,'#ffd23f');
-  const base=goal-100,pr=Math.max(0,Math.min(1,(total-base)/100)),live=[...ppl.values()].filter(o=>o.k).length;
-  rr(30,84,W-60,26,13);g.fillStyle='rgba(0,0,0,.45)';g.fill();
-  if(pr>0){rr(30,84,Math.max(26,(W-60)*pr),26,13);const gr=g.createLinearGradient(30,0,W-30,0);gr.addColorStop(0,'#ff9d2e');gr.addColorStop(1,'#ffd23f');g.fillStyle=gr;g.fill()}
-  txt('กระทง '+live+' ใบ  ·  บุญรวม '+total+' / '+goal,W/2,97,16,'#fff');
-  txt('❤️ ไลก์ ลอยไกล',92,130,17,'#fff');txt('🙏 พิมพ์ "ขอ…"',270,130,17,'#fff');txt('🎁 ของขวัญ กระทงทอง',444,130,16,'#ffe9a8');
-  rr(24,150,W-48,88,16);g.fillStyle='rgba(10,4,30,.55)';g.fill();g.strokeStyle='rgba(255,210,122,.8)';g.lineWidth=2;g.stroke();
-  if(prayer){
-    txt('🏮 คำอธิษฐานจาก '+prayer.name,W/2,172,17,'#ffd27a');
-    const L=wrap(prayer.text,W-80,21,2);L.forEach((l,i)=>txt(l,W/2,200+i*26-(L.length===1?8:0)+(L.length===1?12:0),21,'#fff'));
-  }else{
-    txt('พิมพ์ "ขอให้…" ในคอมเมนต์',W/2,184,21,'#fff');txt('แล้วกระทงพร้อมคำอธิษฐานของคุณจะลอยไป',W/2,214,17,'#cbb6f5',null,false);
-  }
-  const top=[...ppl.values()].sort((a,b)=>b.score-a.score).slice(0,3).filter(c=>c.score>0);
-  rr(24,248,330,28,14);g.fillStyle='rgba(10,4,30,.55)';g.fill();
-  if(!top.length)txt('🏵 เจ้าภาพกระทง  รอผู้ร่วมบุญ',40,262,16,'#ffd27a','left');
-  else{txt('🏵',40,262,16,'#ffd27a','left');top.forEach((c,i)=>txt((i+1)+'.'+c.name.slice(0,5)+' '+c.score,68+i*98,262,14,i?'#fff':'#ffd27a','left'))}
-  // กระทง เรียงตามช่องน้ำ
-  const arr=[...ppl.values()].filter(o=>o.k).sort((a,b)=>a.lane-b.lane||a.x-b.x);
-  arr.forEach(p=>drawK(p,t));
+  g.drawImage(bgc,0,0);water(t);drawStations(t);
+  [...ppl.values()].sort((a,b)=>a.y-b.y).forEach(p=>drawPerson(p,t));
+  [...krs].sort((a,b)=>a.lane-b.lane||a.x-b.x).forEach(k=>drawK(k,t));
   // โคมลอย
   for(const l of lants){
-    const a=Math.min(1,(l.y-150)/70,l.age*1.5);g.globalAlpha=Math.max(0,a);
-    g.shadowColor='#ffb347';g.shadowBlur=14;g.fillStyle='#ff8a2e';rr(l.x-8,l.y-11,16,22,6);g.fill();g.shadowBlur=0;
-    g.fillStyle='#ffd88a';rr(l.x-4,l.y-6,8,12,4);g.fill();g.globalAlpha=1;
+    const a=Math.min(1,(l.y-205)/40,l.age*1.5);g.globalAlpha=Math.max(0,a);const z=l.big?1.4:1;
+    g.shadowColor='#ffb347';g.shadowBlur=14;g.fillStyle='#ff8a2e';rr(l.x-8*z,l.y-11*z,16*z,22*z,6*z);g.fill();g.shadowBlur=0;
+    g.fillStyle='#ffd88a';rr(l.x-4*z,l.y-6*z,8*z,12*z,4*z);g.fill();g.globalAlpha=1;
   }
+  // ส่วนหัว (อยู่ในโซนปลอดภัยเหนือช่องคอมเมนต์)
+  txt('🪷 ลอยกระทง LIVE',W/2,38,32,'#ffd23f');
+  const base=goal-100,pr=Math.max(0,Math.min(1,(total-base)/100));
+  rr(30,60,W-60,24,12);g.fillStyle='rgba(0,0,0,.45)';g.fill();
+  if(pr>0){rr(30,60,Math.max(24,(W-60)*pr),24,12);const gr=g.createLinearGradient(30,0,W-30,0);gr.addColorStop(0,'#ff9d2e');gr.addColorStop(1,'#ffd23f');g.fillStyle=gr;g.fill()}
+  txt('กระทง '+krs.length+' ใบ  ·  บุญรวม '+total+' / '+goal,W/2,72,15,'#fff');
+  txt('❤️ ไลก์ ทำบุญ',84,102,16,'#fff');txt('🙏 พิมพ์ "ขอ…" ลอยกระทง',280,102,16,'#fff');txt('🎁 กระทงทอง',468,102,16,'#ffe9a8');
+  rr(24,116,W-48,70,16);g.fillStyle='rgba(10,4,30,.6)';g.fill();g.strokeStyle='rgba(255,210,122,.85)';g.lineWidth=2;g.stroke();
+  if(panel){
+    txt(panel.head,W/2,131,16,panel.col);
+    const L=panel.lines||wrap(panel.text,W-80,20,2);L.forEach((l,i)=>txt(l,W/2,(L.length===1?165:153+i*22),20,'#fff'));
+  }else{
+    txt('พิมพ์ "ขอให้…" ในคอมเมนต์',W/2,146,20,'#fff');txt('แล้วลอยกระทงพร้อมคำอธิษฐานที่ท่าน้ำวัด',W/2,170,16,'#cbb6f5',null,false);
+  }
+  const top=[...ppl.values()].sort((a,b)=>b.score-a.score).slice(0,3).filter(c=>c.score>0);
+  rr(24,192,W-48,24,12);g.fillStyle='rgba(10,4,30,.55)';g.fill();
+  if(!top.length)txt('🏵 เจ้าภาพงานลอยกระทง  รอผู้ร่วมบุญ',40,204,14,'#ffd27a','left');
+  else{txt('🏵',38,204,14,'#ffd27a','left');top.forEach((c,i)=>txt((i+1)+'.'+c.name.slice(0,6)+' '+c.score,64+i*150,204,14,i?'#fff':'#ffd27a','left'))}
+  // ป้ายข้างจอ: ของขวัญ (ซ้าย) และเซียมซี (ขวา)
+  rr(6,228,92,158,12);g.fillStyle='rgba(10,4,30,.62)';g.fill();g.strokeStyle='rgba(255,210,122,.8)';g.lineWidth=1.5;g.stroke();
+  txt('🎁 ของขวัญ',52,242,14,'#ffd27a');
+  [['🌹 เล็ก','กระทงทอง','+ พลุ'],['🍩 กลาง','+ โคมลอยฟ้า','+ เซียมซีทอง'],['🌌 ใหญ่','กระทงมหาบุญ','พลุเต็มฟ้า']].forEach((r,i)=>{
+    const y=262+i*42;txt(r[0],52,y,13,'#ffe9a8');txt(r[1],52,y+14,11,'#fff',null,false);txt(r[2],52,y+27,11,'#fff',null,false)});
+  rr(396,228,138,82,12);g.fillStyle='rgba(10,4,30,.62)';g.fill();g.strokeStyle='rgba(255,210,122,.8)';g.lineWidth=1.5;g.stroke();
+  txt('🔮 เสี่ยงเซียมซี',465,243,14,'#ffd27a');txt('พิมพ์ "เซียมซี"',465,264,15,'#fff');txt('รับใบทำนายสนุกๆ',465,284,12,'#cbb6f5',null,false);txt('(เพื่อความบันเทิง)',465,299,11,'#cbb6f5',null,false);
   // ดอกไม้ไฟและประกาย
   for(const p of parts){g.globalAlpha=Math.max(0,Math.min(1,p.l));g.globalCompositeOperation=p.add?'lighter':'source-over';g.fillStyle=p.c;g.fillRect(p.x-2,p.y-2,p.add?3:4,p.add?3:4)}
   g.globalAlpha=1;g.globalCompositeOperation='source-over';
   for(const f of floats){g.globalAlpha=Math.min(1,f.l);txt(f.t,f.x,f.y,f.s,f.c);g.globalAlpha=1}
   if(banner){
     const a=Math.min(1,banner.life,(4.5-banner.life)*4+.2);g.globalAlpha=Math.max(0,a);
-    rr(40,396,W-80,76,20);g.fillStyle='rgba(30,10,50,.82)';g.fill();g.strokeStyle='#ffd23f';g.lineWidth=3;g.stroke();
-    txt(banner.t1.slice(0,26),W/2,422,22,'#fff');txt(banner.t2,W/2,452,21,'#ffd23f');g.globalAlpha=1;
+    rr(40,262,W-80,76,20);g.fillStyle='rgba(30,10,50,.85)';g.fill();g.strokeStyle='#ffd23f';g.lineWidth=3;g.stroke();
+    txt(banner.t1.slice(0,26),W/2,288,22,'#fff');txt(banner.t2,W/2,318,21,'#ffd23f');g.globalAlpha=1;
   }
   if(isDemo||q.has('debug')||performance.now()<20000){
     g.fillStyle=status.ok?'#3ddc97':'#ff4d6d';g.beginPath();g.arc(W-20,20,7,0,6.28);g.fill();
