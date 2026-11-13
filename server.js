@@ -33,11 +33,37 @@ const PORT = process.env.PORT || 3000;
 let conn = null, connected = false, username = '', gen = 0, retry = null, sumTimer = null;
 let lastErr = '', cnt = {};
 
+// ---- พร็อกซีรูปโปรไฟล์ (กันปัญหารูปจาก TikTok โหลดตรงไม่ได้) อนุญาตเฉพาะโดเมนรูปของ TikTok ----
+const AV_OK = /(^|\.)(tiktokcdn(-us|-eu)?\.com|tiktokv\.(com|us)|ibytedtos\.com|byteimg\.com|ibyteimg\.com|muscdn\.com)$/i;
+const avCache = new Map();
+let sampleAvatar = '';
+function serveAvatar(req, res) {
+  let u = '', host = '';
+  try { u = new URL(req.url, 'http://x').searchParams.get('u') || ''; host = new URL(u).hostname; } catch (_) {}
+  if (!u || !/^https:/i.test(u) || !AV_OK.test(host)) { res.writeHead(400); return res.end(); }
+  const hit = avCache.get(u);
+  if (hit) { res.writeHead(200, { 'Content-Type': hit.ct, 'Cache-Control': 'public,max-age=3600' }); return res.end(hit.buf); }
+  fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    .then(async (r) => {
+      let fh = ''; try { fh = new URL(r.url).hostname; } catch (_) {}
+      const ct = r.headers.get('content-type') || '';
+      if (!r.ok || !AV_OK.test(fh) || !/^image\//i.test(ct)) { res.writeHead(502); return res.end(); }
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 600000) { res.writeHead(413); return res.end(); }
+      if (avCache.size > 300) avCache.delete(avCache.keys().next().value);
+      avCache.set(u, { ct, buf });
+      res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'public,max-age=3600' });
+      res.end(buf);
+    })
+    .catch(() => { res.writeHead(502); res.end(); });
+}
+
 const server = http.createServer((req, res) => {
+  if (req.url.startsWith('/avatar?')) return serveAvatar(req, res);
   if (req.url.startsWith('/health')) { res.writeHead(200); return res.end('ok'); }
   if (req.url.startsWith('/status')) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ user: username, connected, lastError: lastErr, gameClients: wss.clients.size, eventsReceived: cnt, libVersion: libVer, usingClass, hasLiveConnection: !!lib.TikTokLiveConnection, hasPushConnection: !!lib.WebcastPushConnection, hasSignKey: !!process.env.SIGN_API_KEY }, null, 2));
+    return res.end(JSON.stringify({ user: username, connected, lastError: lastErr, gameClients: wss.clients.size, eventsReceived: cnt, libVersion: libVer, usingClass, sampleAvatar, hasLiveConnection: !!lib.TikTokLiveConnection, hasPushConnection: !!lib.WebcastPushConnection, hasSignKey: !!process.env.SIGN_API_KEY }, null, 2));
   }
   fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
     if (err) { res.writeHead(500); return res.end('ไม่พบไฟล์ index.html'); }
@@ -50,12 +76,11 @@ const send = (o) => {
   const s = JSON.stringify(o);
   wss.clients.forEach((c) => c.readyState === 1 && c.send(s));
 };
-const status = () => send({ type: 'status', ok: connected, user: username, err: lastErr, cnt });
-setInterval(() => { if (wss.clients.size) status(); }, 5000);
+const status = () => send({ type: 'status', ok: connected, user: username, err: lastErr });
 
 wss.on('connection', (ws) => {
   console.log('🔌 หน้าเกมเชื่อมเข้ามา (ตอนนี้ ' + wss.clients.size + ' หน้า)');
-  ws.send(JSON.stringify({ type: 'status', ok: connected, user: username, err: lastErr, cnt }));
+  ws.send(JSON.stringify({ type: 'status', ok: connected, user: username, err: lastErr }));
   ws.on('message', (raw) => {
     try {
       const m = JSON.parse(raw);
@@ -88,7 +113,14 @@ function start(user) {
   // รองรับทั้งไลบรารีเวอร์ชันเก่า (ข้อมูลแบน) และเวอร์ชันใหม่ (ข้อมูลซ้อนใน d.user)
   const who = (d) => {
     const u = d.user || d;
-    const pic = u.profilePictureUrl || (u.profilePicture && (u.profilePicture.url || (u.profilePicture.urls && u.profilePicture.urls[0]))) || '';
+    const pickPic = (pp) => {
+      if (!pp) return '';
+      if (typeof pp === 'string') return pp;
+      const arr = (pp.urls || pp.urlList || (pp.url ? [pp.url] : [])).filter((x) => typeof x === 'string');
+      return arr.find((x) => /\.jpe?g/i.test(x)) || arr.find((x) => /\.png/i.test(x)) || arr.find((x) => /\.webp/i.test(x)) || arr.find((x) => !/\.heic/i.test(x)) || arr[0] || '';
+    };
+    const pic = u.profilePictureUrl || pickPic(u.profilePicture) || pickPic({ urls: u.profilePictureUrls }) || pickPic(u.avatarThumb) || pickPic(u.avatarMedium) || '';
+    if (pic && !sampleAvatar) sampleAvatar = String(pic).slice(0, 90);
     return {
       id: String(u.uniqueId || u.userId || d.uniqueId || d.userId || 'unknown'),
       name: u.nickname || u.uniqueId || d.nickname || d.uniqueId || 'ไม่ระบุชื่อ',
@@ -97,7 +129,7 @@ function start(user) {
   };
   const seen = (t, d) => {
     cnt[t] = (cnt[t] || 0) + 1;
-    if (cnt[t] <= 3) console.log('📩 ได้รับ ' + t + ' จาก ' + who(d).name);
+    if (cnt[t] <= 3) { const w = who(d); console.log('📩 ได้รับ ' + t + ' จาก ' + w.name + (w.avatar ? ' (มีรูปโปรไฟล์)' : ' (ไม่พบรูปโปรไฟล์)')); }
   };
   sumTimer = setInterval(() => {
     if (my !== gen) return;
@@ -117,12 +149,6 @@ function start(user) {
     const n = d.repeatCount || 1;
     const dia = d.diamondCount || gd.diamondCount || 1;
     send({ type: 'gift', ...who(d), gift: d.giftName || gd.giftName || 'ของขวัญ', n, diamonds: dia * n });
-  });
-  // จำนวนผู้ชมปัจจุบัน -> เกมใช้ให้ตัวละครบนจอไม่เกินจำนวนคนที่ดูอยู่จริง
-  conn.on('roomUser', (d) => {
-    cnt.roomUser = (cnt.roomUser || 0) + 1;
-    const n = Number(d && (d.viewerCount || d.userCount || d.total)) || 0;
-    if (n) send({ type: 'viewers', n });
   });
   conn.on('error', (e) => { console.error('⚠️ error จาก TikTok:', (e && e.message) || e); });
   conn.on('disconnected', () => {
